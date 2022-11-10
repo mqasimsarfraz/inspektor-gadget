@@ -195,9 +195,9 @@ jobs:
       uses: actions/cache@v3.0.11
       with:
         path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-docker-${{ matrix.type }}-${{ hashFiles('Dockerfiles/gadget-${{ matrix.type }}.Dockerfile') }}
+        key: ${{ runner.os }}-docker-${{ matrix.type }}-${{ matrix.platform }}-${{ hashFiles(format('Dockerfiles/gadget-{0}.Dockerfile', matrix.type)) }}-${{ hashFiles('go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-docker-${{ matrix.type }}-
+          ${{ runner.os }}-docker-${{ matrix.type }}-${{ matrix.platform }}-
     - name: Login to Container Registry
       uses: docker/login-action@v2
       with:
@@ -249,6 +249,13 @@ jobs:
       if: github.event_name != 'pull_request'
       run: |
           echo "${{ matrix.type }}-${{ matrix.platform }}=${{ steps.publish-gadget-container-images.outputs.digest }}" >> $GITHUB_OUTPUT
+
+    # https://github.com/docker/build-push-action/issues/252
+    # https://github.com/moby/buildkit/issues/1896
+    - name: Move gadget ${{ matrix.type }} ${{ matrix.os }} ${{ matrix.platform }} container image cache to correct localtion
+      run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-docker /tmp/.buildx-cache
 
   publish-gadget-images-manifest:
     name: Publish gadget container images manifest
