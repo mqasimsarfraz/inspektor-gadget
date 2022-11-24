@@ -21,7 +21,7 @@ some developed specifically for use in Inspektor Gadget. It automatically maps
 low-level kernel primitives to high-level Kubernetes resources, making it easier
 and quicker to find the relevant information.
 
-## The Gadgets   
+## The Gadget
 
 Inspektor Gadget tools are known as gadgets. You can deploy one, two or many gadgets.
 
