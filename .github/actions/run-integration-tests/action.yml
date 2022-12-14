@@ -63,7 +63,13 @@ runs:
           CONTAINER_REPO=${{ inputs.container_repo }} \
           IMAGE_TAG=${{ inputs.image_tag }} \
           -o kubectl-gadget integration-tests |& tee integration.log & wait $!
+        # print the kubernetes events
+        kubectl get events --all-namespaces --sort-by='.lastTimestamp' |& tee k8s-events.log || true
         echo "IntegrationTestsJob: Done"
+    - name : Print Kubernetes events
+      if: always()
+      run: |
+        cat k8s-events.log
     - name: Prepare and publish test reports
       if: always()
       continue-on-error: true
