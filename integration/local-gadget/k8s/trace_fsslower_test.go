@@ -36,7 +36,7 @@ func TestTraceFsslower(t *testing.T) {
 		ExpectedOutputFn: func(output string) error {
 			expectedEntry := &fsslowerTypes.Event{
 				Event: BuildBaseEvent(ns),
-				Comm:  "cat",
+				Comm:  "caft",
 				File:  "foo",
 				Op:    "R",
 			}
