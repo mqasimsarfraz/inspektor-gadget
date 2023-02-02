@@ -541,7 +541,7 @@ jobs:
         if: matrix.runtime == 'cri-o'
         run: |
           curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-          sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu  $(lsb_release -cs)  test"
+          sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu  $(lsb_release -cs)  stable"
           sudo apt-get update
           sudo apt-get install docker-ce
       - name: Run integration for container runtime ${{ matrix.runtime }}
@@ -716,7 +716,7 @@ jobs:
     strategy:
       matrix:
         type: [default, core]
-        driver: [none, docker]
+        profile: [docker, containerd, cri-o, multi-node]
     steps:
     - uses: actions/checkout@v3
     - name: Setup go
@@ -724,25 +724,28 @@ jobs:
       with:
         go-version: ${{ env.GO_VERSION }}
         cache: true
+      # https://github.com/kubernetes/minikube/issues/12928#issuecomment-1245458044
+    - name: Upgrade docker for ${{ matrix.profile }}
+      if: matrix.profile == 'cri-o'
+      run: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+        sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu  $(lsb_release -cs)  stable"
+        sudo apt-get update
+        sudo apt-get install docker-ce
     - name: Setup Minikube
-      uses: manusa/actions-setup-minikube@v2.7.2
-      with:
-        minikube version: 'v1.25.2'
-        kubernetes version: 'v1.23.0'
-        github token: ${{ secrets.GITHUB_TOKEN }}
-        driver: ${{ matrix.driver }}
-        # When using docker driver, run the integration tests on two nodes.
-        # As GitHub Runner has only 2 CPU and 7 GB of DRAM, we cannot use a big
-        # number here.
-        start args: ${{ matrix.driver == 'docker' && '-n 2' || '' }}
+      # When using multi-node docker driver, run the integration tests on two nodes.
+      # As GitHub Runner has only 2 CPU and 7 GB of DRAM, we cannot use a big
+      # number here
+      run: |
+        MINIKUBE_PARAMS="${{ matrix.profile == 'multi-node' && '-n 2' || '' }}" \
+          make \
+          CONTAINER_RUNTIME=${{ matrix.profile == 'multi-node' && 'docker' || matrix.profile }} \
+          minikube-start
     - name: Get gadget-container-image-${{ matrix.type }}-linux-amd64.tar from artifact.
       uses: actions/download-artifact@v3
       with:
         name: gadget-container-image-${{ matrix.type }}-linux-amd64.tar
         path: /home/runner/work/inspektor-gadget/
-    - name: Prepare minikube by loading gadget-container-image-${{ matrix.type }}-linux-amd64.tar
-      run: |
-        minikube image load /home/runner/work/inspektor-gadget/gadget-container-image-${{ matrix.type }}-linux-amd64.tar
     - name: Set container repository and determine image tag
       id: set-repo-determine-image-tag
       uses: ./.github/actions/set-container-repo-and-determine-image-tag
@@ -750,6 +753,10 @@ jobs:
         registry: ${{ env.REGISTRY }}
         container-image: ${{ env.CONTAINER_REPO }}
         co-re: ${{ matrix.type == 'core' }}
+    - name: Prepare minikube by loading gadget-container-image-${{ matrix.type }}-linux-amd64.tar
+      run: |
+        docker load -i /home/runner/work/inspektor-gadget/gadget-container-image-${{ matrix.type }}-linux-amd64.tar
+        minikube image load ${{ steps.set-repo-determine-image-tag.outputs.container-repo }}:${{ steps.set-repo-determine-image-tag.outputs.image-tag }}
     - name: Run integration tests
       uses: ./.github/actions/run-integration-tests
       with:
