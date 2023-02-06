@@ -1,0 +1,31 @@
+name: "Setup minikube environment"
+description: "Setup minikube environment with different profiles"
+
+inputs:
+  profile:
+    description: "The profile to use for minikube."
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    # https://github.com/kubernetes/minikube/issues/12928#issuecomment-1245458044
+    - name: Upgrade docker for ${{ inputs.profile }}
+      shell: bash
+      if: inputs.profile == 'cri-o'
+      run: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+        sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu  $(lsb_release -cs)  stable"
+        sudo apt-get update
+        sudo apt-get install docker-ce
+    - name: Start minikube
+      shell: bash
+      run: |
+        make minikube-start-$CONTAINER_RUNTIME
+      env:
+        # When using multi-node profile, run the integration tests on two nodes.
+        # As GitHub Runner has only 2 CPU and 7 GB of DRAM, we cannot use a big
+        # number here
+        MINIKUBE_PARAMS: ${{ inputs.profile == 'multi-node' && '-n 2' || '' }}
+        CONTAINER_RUNTIME: ${{ inputs.profile == 'multi-node' && 'docker' || inputs.profile }}
+
