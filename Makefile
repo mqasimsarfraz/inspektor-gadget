@@ -111,6 +111,7 @@ kubectl-gadget-%: phony_explicit
 	export GO111MODULE=on CGO_ENABLED=0 && \
 	export GOOS=$(shell echo $* |cut -f1 -d-) GOARCH=$(shell echo $* |cut -f2 -d-) && \
 	go build -ldflags $(LDFLAGS) \
+		-tags withoutebpf \
 		-o kubectl-gadget-$${GOOS}-$${GOARCH} \
 		github.com/inspektor-gadget/inspektor-gadget/cmd/kubectl-gadget
 
