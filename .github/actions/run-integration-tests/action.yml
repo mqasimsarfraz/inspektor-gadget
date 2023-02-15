@@ -14,6 +14,9 @@ inputs:
   kubernetes_architecture:
     description: 'The CPU architecture used to select arch specific config in tests.'
     required: true
+  runtime:
+    description: 'The container runtime used to select runtime specific config in tests.'
+    required: true
 
 runs:
   using: "composite"
@@ -53,6 +56,37 @@ runs:
         # https://docs.github.com/en/actions/managing-workflow-runs/canceling-a-workflow#steps-github-takes-to-cancel-a-workflow-run
         trap 'cleanup SIGINT' SIGINT
         trap 'cleanup SIGTERM' SIGTERM
+
+        
+        sleep 30 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 30 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+
+        sleep 60 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 60 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+
+        sleep 90 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 90 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+
+        sleep 120 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 120 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+
+        sleep 150 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 150 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+
+        sleep 180 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 180 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        
+        sleep 210 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 210 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        
+        sleep 240 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 240 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        
+        sleep 270 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 270 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        
+        sleep 300 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 300 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
 
         # https://mywiki.wooledge.org/SignalTrap#When_is_the_signal_handled.3F
         echo "IntegrationTestsJob: Start"

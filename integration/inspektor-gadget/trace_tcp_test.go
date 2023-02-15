@@ -60,7 +60,7 @@ func TestTraceTcp(t *testing.T) {
 	commands := []*Command{
 		CreateTestNamespaceCommand(ns),
 		traceTCPCmd,
-		PodCommand("test-pod", "nginx", ns, "[sh, -c]", "nginx && while true; do curl 127.0.0.1; sleep 0.1; done"),
+		PodCommand("test-pod", "nginx", ns, "[sh, -c]", "nginx && while true; do curl 127.0.0.1; sleep 0.5; done"),
 		WaitUntilTestPodReadyCommand(ns),
 		DeleteTestNamespaceCommand(ns),
 	}

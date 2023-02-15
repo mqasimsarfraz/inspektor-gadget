@@ -68,6 +68,7 @@ spec:
     resources:
       limits:
         memory: "128Mi"
+		cpu: "50m"
     command: ["/bin/sh", "-c"]
     args:
     - while true; do tail /dev/zero; done
