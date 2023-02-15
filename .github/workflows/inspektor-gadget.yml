@@ -792,6 +792,7 @@ jobs:
         kubernetes_architecture: "amd64"
         container_repo: ${{ steps.set-repo-determine-image-tag.outputs.container-repo }}
         image_tag: ${{ steps.set-repo-determine-image-tag.outputs.image-tag }}
+        runtime: ${{ matrix.runtime }}
 
   release:
     name: Release

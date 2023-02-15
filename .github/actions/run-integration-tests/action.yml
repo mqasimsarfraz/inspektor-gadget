@@ -14,6 +14,9 @@ inputs:
   kubernetes_architecture:
     description: 'The CPU architecture used to select arch specific config in tests.'
     required: true
+  runtime:
+    description: 'The container runtime used to select runtime specific config in tests.'
+    required: true
 
 runs:
   using: "composite"
@@ -53,6 +56,59 @@ runs:
         # https://docs.github.com/en/actions/managing-workflow-runs/canceling-a-workflow#steps-github-takes-to-cancel-a-workflow-run
         trap 'cleanup SIGINT' SIGINT
         trap 'cleanup SIGTERM' SIGTERM
+
+        
+        sleep 30 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 30 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        sleep 30 && top -b -n 1 > /tmp/top.txt && cat /tmp/top.txt &
+
+        sleep 60 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 60 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        sleep 60 && top -b -n 1 > /tmp/top.txt && cat /tmp/top.txt &
+
+        sleep 90 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 90 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        sleep 90 && top -b -n 1 > /tmp/top.txt && cat /tmp/top.txt &
+
+        sleep 120 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 120 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        sleep 120 && top -b -n 1 > /tmp/top.txt && cat /tmp/top.txt &
+
+        sleep 150 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 150 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        sleep 150 && top -b -n 1 > /tmp/top.txt && cat /tmp/top.txt &
+
+        sleep 180 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 180 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        sleep 180 && top -b -n 1 > /tmp/top.txt && cat /tmp/top.txt &
+        
+        sleep 210 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 210 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        sleep 210 && top -b -n 1 > /tmp/top.txt && cat /tmp/top.txt &
+        
+        sleep 240 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 240 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        sleep 240 && top -b -n 1 > /tmp/top.txt && cat /tmp/top.txt &
+        
+        sleep 270 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 270 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        sleep 270 && top -b -n 1 > /tmp/top.txt && cat /tmp/top.txt &
+
+        sleep 300 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 300 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        sleep 300 && top -b -n 1 > /tmp/top.txt && cat /tmp/top.txt &
+
+        sleep 330 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 330 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        sleep 330 && top -b -n 1 > /tmp/top.txt && cat /tmp/top.txt &
+
+        sleep 360 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 360 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        sleep 360 && top -b -n 1 > /tmp/top.txt && cat /tmp/top.txt &
+
+        sleep 390 && docker exec minikube-${{ inputs.runtime }} bash -c 'crictl ps && crictl stats' &
+        sleep 390 && docker exec minikube-${{ inputs.runtime }}-m02 bash -c 'crictl ps && crictl stats' &
+        sleep 390 && top -b -n 1 > /tmp/top.txt && cat /tmp/top.txt &
 
         # https://mywiki.wooledge.org/SignalTrap#When_is_the_signal_handled.3F
         echo "IntegrationTestsJob: Start"
