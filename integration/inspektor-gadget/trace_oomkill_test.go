@@ -67,6 +67,7 @@ spec:
     image: busybox
     resources:
       limits:
+        cpu: "100m"
         memory: "128Mi"
     command: ["/bin/sh", "-c"]
     args:
