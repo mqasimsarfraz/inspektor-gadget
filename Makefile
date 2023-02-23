@@ -177,7 +177,7 @@ integration-tests: kubectl-gadget
 		go test ./integration/inspektor-gadget/... \
 			-v \
 			-integration \
-			-timeout 30m \
+			-timeout 2m \
 			-k8s-distro $(KUBERNETES_DISTRIBUTION) \
 			-k8s-arch $(KUBERNETES_ARCHITECTURE) \
 			-image $(CONTAINER_REPO):$(IMAGE_TAG) \
