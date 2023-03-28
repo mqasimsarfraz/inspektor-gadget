@@ -20,6 +20,7 @@ import (
 	"github.com/miekg/dns"
 )
 
+// main is a simple DNS server
 func main() {
 	dns.Handle(".", dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
