@@ -1,0 +1,24 @@
+WEBSOCKET ws://10.211.55.12:8099/ws
+Content-Type: application/json
+
+{
+  "action": "start",
+  "payload": {
+    "id": "1234",
+    "gadgetName": "open",
+    "gadgetCategory": "trace"
+  }
+}
+
+===
+
+{
+  "action": "start",
+  "payload": {
+    "id": "5678",
+    "gadgetName": "ebpf",
+    "gadgetCategory": "top"
+  }
+}
+
+###
