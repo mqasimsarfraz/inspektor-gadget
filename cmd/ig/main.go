@@ -15,6 +15,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -58,6 +59,15 @@ func main() {
 	common.AddCommandsFromRegistry(rootCmd, runtime, columnFilters)
 
 	rootCmd.AddCommand(web.NewWebCommand(runtime))
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use: "dump-catalog",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			catalog, _ := runtime.GetCatalog()
+			d, _ := json.MarshalIndent(catalog, "", "  ")
+			return os.WriteFile("catalog.json", d, 0o644)
+		},
+	})
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

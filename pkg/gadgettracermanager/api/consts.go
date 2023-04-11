@@ -24,5 +24,6 @@ const (
 )
 
 const (
-	GadgetServiceSocket = "/run/gadgetservice.socket"
+	GadgetServiceSocket    = "/run/gadgetservice.socket"
+	GadgetWebServiceSocket = "/run/gadgetwebservice.socket"
 )

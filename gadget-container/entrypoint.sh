@@ -172,5 +172,6 @@ echo "Starting the Gadget Tracer Manager..."
 cd /
 rm -f /run/gadgettracermanager.socket
 rm -f /run/gadgetservice.socket
+rm -f /run/gadgetwebservice.socket
 exec /bin/gadgettracermanager -serve -hook-mode=$GADGET_TRACER_MANAGER_HOOK_MODE \
     -controller -fallback-podinformer=$INSPEKTOR_GADGET_OPTION_FALLBACK_POD_INFORMER
