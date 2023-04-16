@@ -107,6 +107,7 @@ var runcPaths = []string{
 	"/usr/local/sbin/runc",
 	"/usr/lib/cri-o-runc/sbin/runc",
 	"/run/torcx/unpack/docker/bin/runc",
+	"/usr/bin/crun",
 }
 
 // true if the SYS_PIDFD_OPEN syscall is available
@@ -611,7 +612,8 @@ func (n *RuncNotifier) watchRuncIterate() (bool, error) {
 	//   1. from containerd-shim (or similar)
 	//   2. from runc, by this re-execution.
 	// This filter skips the first one and handles the second one.
-	if commFromPid(pid) != "runc" {
+	comm := commFromPid(pid)
+	if comm != "runc" && comm != "crun" {
 		return false, nil
 	}
 
