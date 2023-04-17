@@ -21,6 +21,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -52,8 +53,14 @@ type ContainerEvent struct {
 	// Type is whether the container was added or removed
 	Type EventType
 
+	// Runtime is runc or crun
+	Runtime string
+
 	// ContainerID is the container id, typically a 64 hexadecimal string
 	ContainerID string
+
+	// ContainerName is the container name, typically two words with a underscore
+	ContainerName string
 
 	// ContainerPID is the process id of the container
 	ContainerPID uint32
@@ -76,6 +83,13 @@ type runcContainer struct {
 	pidfd int
 }
 
+type futureContainer struct {
+	id        string
+	name      string
+	bundleDir string
+	pidFile   string
+}
+
 type RuncNotifier struct {
 	runcBinaryNotify *fanotify.NotifyFD
 	callback         RuncNotifyFunc
@@ -87,6 +101,11 @@ type RuncNotifier struct {
 	// Keys: Container ID
 	containers map[string]*runcContainer
 	mu         sync.Mutex
+
+	// futureContainers
+	// Keys: Container ID
+	// Values: Container name
+	futureContainers map[string]*futureContainer
 
 	// set to true when RuncNotifier is closed
 	closed bool
@@ -160,9 +179,10 @@ func Supported() bool {
 // - runc must be installed in one of the paths listed by runcPaths
 func NewRuncNotifier(callback RuncNotifyFunc) (*RuncNotifier, error) {
 	n := &RuncNotifier{
-		callback:   callback,
-		containers: make(map[string]*runcContainer),
-		pipeFds:    []int{-1, -1},
+		callback:         callback,
+		containers:       make(map[string]*runcContainer),
+		futureContainers: make(map[string]*futureContainer),
+		pipeFds:          []int{-1, -1},
 	}
 
 	runcBinaryNotify, err := initFanotify()
@@ -478,11 +498,13 @@ func (n *RuncNotifier) watchPidFileIterate(pidFileDirNotify *fanotify.NotifyFD, 
 
 	n.callback(ContainerEvent{
 		Type:            EventTypeAddContainer,
+		Runtime:         "runc",
 		ContainerID:     containerID,
 		ContainerPID:    uint32(containerPID),
 		ContainerConfig: containerConfig,
 		Bundle:          bundleDir,
 	})
+
 	return true, nil
 }
 
@@ -574,6 +596,134 @@ func (n *RuncNotifier) watchRunc() {
 	}
 }
 
+func (n *RuncNotifier) parseConmonCmdline(cmdlineArr []string) {
+	if path.Base(cmdlineArr[0]) != "conmon" {
+		return
+	}
+
+	// Parse conmon command line
+	containerName := ""
+	containerID := ""
+	bundleDir := ""
+	pidFile := ""
+	conmonFound := false
+
+	conmonFound = true
+	for i := 0; i < len(cmdlineArr); i++ {
+		verb := cmdlineArr[i]
+		arg := ""
+		if i+1 < len(cmdlineArr) {
+			arg = cmdlineArr[i+1]
+		}
+		switch verb {
+		case "-n", "--name":
+			containerName = arg
+			i++
+		case "-c", "--cid":
+			containerID = arg
+			i++
+		case "-b", "--bundle":
+			bundleDir = arg
+			i++
+		case "-p", "--container-pidfile":
+			pidFile = arg
+			i++
+		}
+	}
+
+	if !conmonFound || containerName == "" || containerID == "" || bundleDir == "" || pidFile == "" {
+		return
+	}
+
+	n.futureContainers[containerID] = &futureContainer{
+		id:        containerID,
+		pidFile:   pidFile,
+		bundleDir: bundleDir,
+		name:      containerName,
+	}
+}
+
+func (n *RuncNotifier) parseOCIRuntime(comm string, cmdlineArr []string) {
+	// Parse runc command line
+	createFound := false
+	startFound := false
+	containerID := ""
+	bundleDir := ""
+	pidFile := ""
+
+	for i := 0; i < len(cmdlineArr); i++ {
+		if cmdlineArr[i] == "create" {
+			createFound = true
+			continue
+		}
+		if cmdlineArr[i] == "start" {
+			startFound = true
+			continue
+		}
+		if cmdlineArr[i] == "--bundle" && i+1 < len(cmdlineArr) {
+			i++
+			bundleDir = filepath.Join(hostRoot, cmdlineArr[i])
+			continue
+		}
+		if cmdlineArr[i] == "--pid-file" && i+1 < len(cmdlineArr) {
+			i++
+			pidFile = filepath.Join(hostRoot, cmdlineArr[i])
+			continue
+		}
+		if cmdlineArr[i] != "" {
+			containerID = cmdlineArr[i]
+		}
+	}
+
+	if comm == "runc" && createFound && bundleDir != "" && pidFile != "" {
+		err := n.monitorRuncInstance(bundleDir, pidFile)
+		if err != nil {
+			log.Errorf("error monitoring runc instance: %v\n", err)
+		}
+	}
+
+	if comm == "crun" && startFound && containerID != "" {
+		if fc, ok := n.futureContainers[containerID]; ok {
+			bundleConfigJSON, err := os.ReadFile(filepath.Join(fc.bundleDir, "config.json"))
+			if err != nil {
+				log.Errorf("error reading bundle config: %v\n", err)
+				return
+			}
+			containerConfig := &ocispec.Spec{}
+			err = json.Unmarshal(bundleConfigJSON, containerConfig)
+			if err != nil {
+				log.Errorf("error unmarshaling bundle config: %v\n", err)
+				return
+			}
+
+			pidFileContent, err := os.ReadFile(fc.pidFile)
+			if err != nil {
+				log.Errorf("error reading pid file: %v\n", err)
+				return
+			}
+			if len(pidFileContent) == 0 {
+				log.Errorf("empty pid file")
+				return
+			}
+			containerPID, err := strconv.Atoi(string(pidFileContent))
+			if err != nil {
+				log.Errorf("error parsing pid file: %v\n", err)
+				return
+			}
+
+			n.callback(ContainerEvent{
+				Type:            EventTypeAddContainer,
+				Runtime:         "crun",
+				ContainerID:     containerID,
+				ContainerPID:    uint32(containerPID),
+				ContainerConfig: containerConfig,
+				Bundle:          bundleDir,
+				ContainerName:   fc.name,
+			})
+		}
+	}
+}
+
 func (n *RuncNotifier) watchRuncIterate() (bool, error) {
 	// Get the next event from fanotify.
 	// Even though the API allows to pass skipPIDs, we cannot use it here
@@ -613,37 +763,20 @@ func (n *RuncNotifier) watchRuncIterate() (bool, error) {
 	//   2. from runc, by this re-execution.
 	// This filter skips the first one and handles the second one.
 	comm := commFromPid(pid)
-	if comm != "runc" && comm != "crun" {
+	cmdlineArr := cmdlineFromPid(pid)
+
+	if len(cmdlineArr) == 0 {
 		return false, nil
 	}
 
-	// Parse runc command line
-	cmdlineArr := cmdlineFromPid(pid)
-	createFound := false
-	bundleDir := ""
-	pidFile := ""
-	for i := 0; i < len(cmdlineArr); i++ {
-		if cmdlineArr[i] == "create" {
-			createFound = true
-			continue
-		}
-		if cmdlineArr[i] == "--bundle" && i+1 < len(cmdlineArr) {
-			i++
-			bundleDir = filepath.Join(hostRoot, cmdlineArr[i])
-			continue
-		}
-		if cmdlineArr[i] == "--pid-file" && i+1 < len(cmdlineArr) {
-			i++
-			pidFile = filepath.Join(hostRoot, cmdlineArr[i])
-			continue
-		}
-	}
-
-	if createFound && bundleDir != "" && pidFile != "" {
-		err := n.monitorRuncInstance(bundleDir, pidFile)
-		if err != nil {
-			log.Errorf("error monitoring runc instance: %v\n", err)
-		}
+	switch comm {
+	case "conmon":
+		// conmon is a special case because it is not a child of the container
+		n.parseConmonCmdline(cmdlineArr)
+	case "runc", "crun":
+		n.parseOCIRuntime(comm, cmdlineArr)
+	default:
+		return false, nil
 	}
 
 	return false, nil

@@ -135,16 +135,26 @@ func WithContainerRuntimeEnrichment(runtime *containerutils.RuntimeConfig) Conta
 		if err != nil {
 			log.Warnf("Runtime enricher (%s): failed to initialize container runtime: %s",
 				runtime.Name, err)
+			// In case podman isn't installed or the version is too old we don't want to fail because
+			// for podman NewContainerRuntimeClient returns an error if the runtime is not available (unlike other runtimes).
+			if runtime.Name == runtimeclient.PodmanName {
+				return nil
+			}
 			return err
 		}
 
-		// Add the enricher for future containers even if enriching the current
-		// containers fails. We do it because the runtime could be temporarily
-		// unavailable and once it is up, we will start receiving the
-		// notifications for its containers thus we will be able to enrich them.
-		cc.containerEnrichers = append(cc.containerEnrichers, func(container *Container) bool {
-			return containerRuntimeEnricher(runtime.Name, runtimeClient, container)
-		})
+		switch runtime.Name {
+		case runtimeclient.PodmanName:
+			// Podman only supports runtime enrichment for initial containers otherwise it will deadlock
+		default:
+			// Add the enricher for future containers even if enriching the current
+			// containers fails. We do it because the runtime could be temporarily
+			// unavailable and once it is up, we will start receiving the
+			// notifications for its containers thus we will be able to enrich them.
+			cc.containerEnrichers = append(cc.containerEnrichers, func(container *Container) bool {
+				return containerRuntimeEnricher(runtime.Name, runtimeClient, container)
+			})
+		}
 
 		cc.cleanUpFuncs = append(cc.cleanUpFuncs, func() {
 			if err := runtimeClient.Close(); err != nil {
@@ -536,9 +546,11 @@ func WithRuncFanotify() ContainerCollectionOption {
 			switch notif.Type {
 			case runcfanotify.EventTypeAddContainer:
 				container := &Container{
+					Runtime:   notif.Runtime,
 					ID:        notif.ContainerID,
 					Pid:       notif.ContainerPID,
 					OciConfig: notif.ContainerConfig,
+					Name:      notif.ContainerName,
 				}
 				cc.AddContainer(container)
 			case runcfanotify.EventTypeRemoveContainer:
@@ -628,6 +640,9 @@ func WithLinuxNamespaceEnrichment() ContainerCollectionOption {
 func WithOCIConfigEnrichment() ContainerCollectionOption {
 	return func(cc *ContainerCollection) error {
 		cc.containerEnrichers = append(cc.containerEnrichers, func(container *Container) bool {
+			if container.Name != "" {
+				return true
+			}
 			if container.OciConfig == nil || container.IsEnriched() {
 				return true
 			}

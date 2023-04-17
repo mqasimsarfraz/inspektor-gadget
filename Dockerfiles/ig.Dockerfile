@@ -11,6 +11,9 @@ ENV GOARCH=${GOARCH}
 ARG VERSION=undefined
 ENV VERSION=${VERSION}
 
+ARG BUILDTAGS=undefined
+ENV BUILDTAGS=${BUILDTAGS}
+
 RUN \
 	export CGO_ENABLED=1 ; \
 	if [ "${GOOS}-${GOARCH}" != "linux-amd64" ] ; then \
@@ -19,5 +22,6 @@ RUN \
 	fi ; \
 	go build \
 		-ldflags "-X main.version=${VERSION} -extldflags '-static'" \
+		-tags "${BUILDTAGS}" \
 		-o ig-${GOOS}-${GOARCH} \
 		github.com/inspektor-gadget/inspektor-gadget/cmd/ig
