@@ -59,7 +59,7 @@ type ContainerEvent struct {
 	// ContainerID is the container id, typically a 64 hexadecimal string
 	ContainerID string
 
-	// ContainerName is the container name, typically two words with a underscore
+	// ContainerName is the container name, typically two words with an underscore
 	ContainerName string
 
 	// ContainerPID is the process id of the container
@@ -99,13 +99,15 @@ type RuncNotifier struct {
 	// AddWatchContainerTermination.
 	//
 	// Keys: Container ID
-	containers map[string]*runcContainer
-	mu         sync.Mutex
+	containers   map[string]*runcContainer
+	containersMu sync.Mutex
 
-	// futureContainers
+	// futureContainers is the set of containers that are detected before
+	// oci-runtime (runc/crun) creates the container e.g. detected via conmon
+	//
 	// Keys: Container ID
-	// Values: Container name
 	futureContainers map[string]*futureContainer
+	futureMu         sync.Mutex
 
 	// set to true when RuncNotifier is closed
 	closed bool
@@ -246,8 +248,8 @@ func cmdlineFromPid(pid int) []string {
 // containers detected by RuncNotifier, but it can also be called for
 // containers detected externally such as initial containers.
 func (n *RuncNotifier) AddWatchContainerTermination(containerID string, containerPID int) error {
-	n.mu.Lock()
-	defer n.mu.Unlock()
+	n.containersMu.Lock()
+	defer n.containersMu.Unlock()
 
 	if _, ok := n.containers[containerID]; ok {
 		// This container is already being watched for termination
@@ -305,7 +307,7 @@ func (n *RuncNotifier) watchContainersTermination() {
 			return
 		}
 
-		n.mu.Lock()
+		n.containersMu.Lock()
 
 		fds := make([]unix.PollFd, len(n.containers)+1)
 		// array to create a relation between the fd position and the container
@@ -323,7 +325,7 @@ func (n *RuncNotifier) watchContainersTermination() {
 			containersByIndex[i+1] = c
 			i++
 		}
-		n.mu.Unlock()
+		n.containersMu.Unlock()
 
 		count, err := unix.Poll(fds, -1)
 		if err != nil && !errors.Is(err, unix.EINTR) {
@@ -357,9 +359,9 @@ func (n *RuncNotifier) watchContainersTermination() {
 
 			unix.Close(c.pidfd)
 
-			n.mu.Lock()
+			n.containersMu.Lock()
 			delete(n.containers, c.id)
-			n.mu.Unlock()
+			n.containersMu.Unlock()
 		}
 	}
 }
@@ -390,9 +392,9 @@ func (n *RuncNotifier) watchContainersTerminationFallback() {
 					ContainerPID: uint32(c.pid),
 				})
 
-				n.mu.Lock()
+				n.containersMu.Lock()
 				delete(n.containers, c.id)
-				n.mu.Unlock()
+				n.containersMu.Unlock()
 			}
 		}
 	}
@@ -496,6 +498,11 @@ func (n *RuncNotifier) watchPidFileIterate(pidFileDirNotify *fanotify.NotifyFD, 
 		return true, nil
 	}
 
+	var containerName string
+	if fc := n.lookupFutureContainer(containerID); fc != nil {
+		containerName = fc.name
+	}
+
 	n.callback(ContainerEvent{
 		Type:            EventTypeAddContainer,
 		Runtime:         "runc",
@@ -503,6 +510,7 @@ func (n *RuncNotifier) watchPidFileIterate(pidFileDirNotify *fanotify.NotifyFD, 
 		ContainerPID:    uint32(containerPID),
 		ContainerConfig: containerConfig,
 		Bundle:          bundleDir,
+		ContainerName:   containerName,
 	})
 
 	return true, nil
@@ -635,16 +643,18 @@ func (n *RuncNotifier) parseConmonCmdline(cmdlineArr []string) {
 		return
 	}
 
+	n.futureMu.Lock()
 	n.futureContainers[containerID] = &futureContainer{
 		id:        containerID,
 		pidFile:   pidFile,
 		bundleDir: bundleDir,
 		name:      containerName,
 	}
+	n.futureMu.Unlock()
 }
 
 func (n *RuncNotifier) parseOCIRuntime(comm string, cmdlineArr []string) {
-	// Parse runc command line
+	// Parse oci-runtime (runc/crun) command line
 	createFound := false
 	startFound := false
 	containerID := ""
@@ -683,44 +693,47 @@ func (n *RuncNotifier) parseOCIRuntime(comm string, cmdlineArr []string) {
 	}
 
 	if comm == "crun" && startFound && containerID != "" {
-		if fc, ok := n.futureContainers[containerID]; ok {
-			bundleConfigJSON, err := os.ReadFile(filepath.Join(fc.bundleDir, "config.json"))
-			if err != nil {
-				log.Errorf("error reading bundle config: %v\n", err)
-				return
-			}
-			containerConfig := &ocispec.Spec{}
-			err = json.Unmarshal(bundleConfigJSON, containerConfig)
-			if err != nil {
-				log.Errorf("error unmarshaling bundle config: %v\n", err)
-				return
-			}
-
-			pidFileContent, err := os.ReadFile(fc.pidFile)
-			if err != nil {
-				log.Errorf("error reading pid file: %v\n", err)
-				return
-			}
-			if len(pidFileContent) == 0 {
-				log.Errorf("empty pid file")
-				return
-			}
-			containerPID, err := strconv.Atoi(string(pidFileContent))
-			if err != nil {
-				log.Errorf("error parsing pid file: %v\n", err)
-				return
-			}
-
-			n.callback(ContainerEvent{
-				Type:            EventTypeAddContainer,
-				Runtime:         "crun",
-				ContainerID:     containerID,
-				ContainerPID:    uint32(containerPID),
-				ContainerConfig: containerConfig,
-				Bundle:          bundleDir,
-				ContainerName:   fc.name,
-			})
+		fc := n.lookupFutureContainer(containerID)
+		if fc == nil {
+			log.Warnf("cannot lookup container for %s\n", containerID)
+			return
 		}
+		bundleConfigJSON, err := os.ReadFile(filepath.Join(fc.bundleDir, "config.json"))
+		if err != nil {
+			log.Errorf("error reading bundle config: %v\n", err)
+			return
+		}
+		containerConfig := &ocispec.Spec{}
+		err = json.Unmarshal(bundleConfigJSON, containerConfig)
+		if err != nil {
+			log.Errorf("error unmarshaling bundle config: %v\n", err)
+			return
+		}
+
+		pidFileContent, err := os.ReadFile(fc.pidFile)
+		if err != nil {
+			log.Errorf("error reading pid file: %v\n", err)
+			return
+		}
+		if len(pidFileContent) == 0 {
+			log.Errorf("empty pid file")
+			return
+		}
+		containerPID, err := strconv.Atoi(string(pidFileContent))
+		if err != nil {
+			log.Errorf("error parsing pid file: %v\n", err)
+			return
+		}
+
+		n.callback(ContainerEvent{
+			Type:            EventTypeAddContainer,
+			Runtime:         "crun",
+			ContainerID:     containerID,
+			ContainerPID:    uint32(containerPID),
+			ContainerConfig: containerConfig,
+			Bundle:          bundleDir,
+			ContainerName:   fc.name,
+		})
 	}
 }
 
@@ -772,6 +785,7 @@ func (n *RuncNotifier) watchRuncIterate() (bool, error) {
 	switch comm {
 	case "conmon":
 		// conmon is a special case because it is not a child of the container
+		// Also, the calling sequence is podman -> conmon -> runc
 		n.parseConmonCmdline(cmdlineArr)
 	case "runc", "crun":
 		n.parseOCIRuntime(comm, cmdlineArr)
@@ -792,4 +806,15 @@ func (n *RuncNotifier) Close() {
 	}
 	n.runcBinaryNotify.File.Close()
 	n.wg.Wait()
+}
+
+func (n *RuncNotifier) lookupFutureContainer(id string) *futureContainer {
+	n.futureMu.Lock()
+	defer n.futureMu.Unlock()
+	fc, ok := n.futureContainers[id]
+	if !ok {
+		return nil
+	}
+	delete(n.futureContainers, id)
+	return fc
 }
