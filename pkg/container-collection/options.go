@@ -135,17 +135,15 @@ func WithContainerRuntimeEnrichment(runtime *containerutils.RuntimeConfig) Conta
 		if err != nil {
 			log.Warnf("Runtime enricher (%s): failed to initialize container runtime: %s",
 				runtime.Name, err)
-			// In case podman isn't installed or the version is too old we don't want to fail because
-			// for podman NewContainerRuntimeClient returns an error if the runtime is not available (unlike other runtimes).
-			if runtime.Name == runtimeclient.PodmanName {
-				return nil
-			}
 			return err
 		}
 
 		switch runtime.Name {
 		case runtimeclient.PodmanName:
-			// Podman only supports runtime enrichment for initial containers otherwise it will deadlock
+			// Podman only supports runtime enrichment for initial containers otherwise it will deadlock.
+			// As a consequence, we need to ensure that new podman containers will be enriched with all
+			// the information via other enrichers e.g. see RuncNotifier.futureContainers implementation
+			// to see how container name is enriched.
 		default:
 			// Add the enricher for future containers even if enriching the current
 			// containers fails. We do it because the runtime could be temporarily
