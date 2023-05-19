@@ -44,23 +44,24 @@ import (
 )
 
 var (
-	controller                 bool
-	serve                      bool
-	liveness                   bool
-	fallbackPodInformer        bool
-	dump                       string
-	hookMode                   string
-	socketfile                 string
-	gadgetServiceSocketFile    string
-	gadgetServiceWebSocketFile string
-	method                     string
-	label                      string
-	tracerid                   string
-	containerID                string
-	namespace                  string
-	podname                    string
-	containername              string
-	containerPid               uint
+	controller                       bool
+	serve                            bool
+	liveness                         bool
+	fallbackPodInformer              bool
+	dump                             string
+	hookMode                         string
+	socketfile                       string
+	gadgetServiceSocketFile          string
+	gadgetServiceWebSocketFile       string
+	gadgetServiceStreamingSocketFile string
+	method                           string
+	label                            string
+	tracerid                         string
+	containerID                      string
+	namespace                        string
+	podname                          string
+	containername                    string
+	containerPid                     uint
 )
 
 var clientTimeout = 2 * time.Second
@@ -69,6 +70,7 @@ func init() {
 	flag.StringVar(&socketfile, "socketfile", "/run/gadgettracermanager.socket", "Socket file")
 	flag.StringVar(&gadgetServiceSocketFile, "service-socketfile", pb.GadgetServiceSocket, "Socket file for gadget service")
 	flag.StringVar(&gadgetServiceWebSocketFile, "service-websocketfile", pb.GadgetWebServiceSocket, "Socket file for gadget service (WebSocket)")
+	flag.StringVar(&gadgetServiceStreamingSocketFile, "service-streamingsocketfile", pb.GadgetStreamingServiceSocket, "Socket file for gadget service (WebSocket)")
 	flag.StringVar(&hookMode, "hook-mode", "auto", "how to get containers start/stop notifications (podinformer, fanotify, auto, none)")
 
 	flag.BoolVar(&serve, "serve", false, "Start server")
@@ -295,8 +297,15 @@ func main() {
 		}()
 
 		ws := webserver.NewWebServer(local.New())
+		os.Remove(gadgetServiceWebSocketFile)
 		go func() {
 			ws.Run("unix", gadgetServiceWebSocketFile)
+		}()
+
+		streamingServer := webserver.NewStreamingServer(local.New())
+		os.Remove(gadgetServiceStreamingSocketFile)
+		go func() {
+			streamingServer.Run("unix", gadgetServiceStreamingSocketFile)
 		}()
 
 		exitSignal := make(chan os.Signal, 1)
