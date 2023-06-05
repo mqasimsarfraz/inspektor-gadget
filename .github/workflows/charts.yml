@@ -1,0 +1,70 @@
+name: Inspektor Gadget Charts
+env:
+  REGISTRY: ghcr.io
+  CONTAINER_REPO: ${{ github.repository }}
+on:
+  workflow_dispatch:
+
+jobs:
+  package-helm-charts:
+    name: Lint and package Helm charts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - id: set-repo-determine-image-tag
+        uses: ./.github/actions/set-container-repo-and-determine-image-tag
+        with:
+          registry: ${{ env.REGISTRY }}
+          container-image: ${{ env.CONTAINER_REPO }}
+          co-re: false
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Lint Helm charts
+        run: make -C charts lint
+      - name: Detect changes for deploy.yaml
+        run: |
+          make generate-manifests
+          changes="$(git status --porcelain)"
+          if [ -n "$changes" ] ; then
+            echo "$changes"
+            exit 1
+          fi
+      - name: Package Helm charts
+        run: |
+          export IMAGE_TAG=${{ steps.set-repo-determine-image-tag.outputs.image-tag }}
+          make -C charts package
+      - name: Upload Helm charts
+        uses: actions/upload-artifact@master
+        with:
+          name: gadget-charts-tgz
+          path: charts/bin/*.tgz
+  charts:
+    name: Charts
+    runs-on: ubuntu-latest
+    needs: package-helm-charts
+    steps:
+      - uses: actions/checkout@v3
+      - name: Get all artifacts.
+        uses: actions/download-artifact@v3
+
+      - name: Move charts to charts directory
+        run: |
+          mkdir .cr-release-packages
+          mv gadget-charts-tgz/*.tgz .cr-release-packages
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.5.0
+        with:
+          skip_packaging: true
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
