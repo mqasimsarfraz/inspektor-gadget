@@ -1,0 +1,54 @@
+name: Inspektor Gadget Charts
+env:
+  REGISTRY: ghcr.io
+  CONTAINER_REPO: ${{ github.repository }}
+on:
+  workflow_dispatch:
+
+jobs:
+  package-helm-charts:
+    name: Lint and package Helm charts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - id: set-repo-determine-image-tag
+        uses: ./.github/actions/set-container-repo-and-determine-image-tag
+        with:
+          registry: ${{ env.REGISTRY }}
+          container-image: ${{ env.CONTAINER_REPO }}
+          co-re: false
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Lint Helm charts
+        run: make -C charts lint
+      - name: Detect changes for deploy.yaml
+        run: |
+          make generate-manifests
+          changes="$(git status --porcelain)"
+          if [ -n "$changes" ] ; then
+            echo "$changes"
+            exit 1
+          fi
+      - name: Package Helm charts
+        run: |
+          export IMAGE_TAG=${{ steps.set-repo-determine-image-tag.outputs.image-tag }}
+          make -C charts package
+      - name: Upload charts to GitHub releases
+        continue-on-error: true
+        uses: csexton/release-asset-action@v2
+        with:
+          pattern: charts/bin/gadget-*.tgz
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          release-url: https://github.com/mqasimsarfraz/inspektor-gadget/releases/latest
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.5.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
