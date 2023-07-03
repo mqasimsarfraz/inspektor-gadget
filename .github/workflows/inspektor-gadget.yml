@@ -1029,6 +1029,22 @@ jobs:
       run: |
         perl tools/check-readme.pl ./kubectl-gadget README.md
 
+  test-release:
+    name: Test release
+    # level: 3
+    needs:
+      - package-helm-charts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Get all artifacts.
+        uses: actions/download-artifact@v3
+      - name: Print all artifacts.
+        run: |
+          ls -l
+          ls -l gadget-charts-tgz/gadget-*.tgz
+
   release:
     name: Release
     # level: 3
