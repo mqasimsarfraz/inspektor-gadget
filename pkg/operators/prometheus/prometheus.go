@@ -103,7 +103,7 @@ func (l *Prometheus) Init(globalParams *params.Params) error {
 		return fmt.Errorf("initialize prometheus exporter: %w", err)
 	}
 	l.exporter = exporter
-	l.meterProvider = sdkmetric.NewMeterProvider(sdkmetric.WithReader(exporter))
+	l.meterProvider = sdkmetric.NewMeterProvider(sdkmetric.WithReader(exporter), sdkmetric.WithView(histogramView))
 
 	listenAddress := globalParams.Get(ParamListenAddress).AsString()
 	metricsPath := globalParams.Get(ParamMetricsPath).AsString()
