@@ -17,10 +17,14 @@ package types
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/hashicorp/go-multierror"
+	log "github.com/sirupsen/logrus"
+
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 )
 
 type Alignment string
@@ -168,4 +172,135 @@ func (m *GadgetMetadata) validateStructs(spec *ebpf.CollectionSpec) error {
 	}
 
 	return result
+}
+
+// Populate fills the metadata  from its ebpf spec
+func (m *GadgetMetadata) Populate(spec *ebpf.CollectionSpec) error {
+	if m.Tracers == nil {
+		m.Tracers = make(map[string]Tracer)
+	}
+
+	if m.Structs == nil {
+		m.Structs = make(map[string]Struct)
+	}
+
+	if err := m.populateTracers(spec); err != nil {
+		return fmt.Errorf("handling trace maps: %w", err)
+	}
+
+	return nil
+}
+
+func (m *GadgetMetadata) populateTracers(spec *ebpf.CollectionSpec) error {
+	traceMap := getTracerMapFromeBPF(spec)
+	if traceMap == nil {
+		log.Debug("No trace map found")
+		return nil
+	}
+
+	traceMapStruct, ok := traceMap.Value.(*btf.Struct)
+	if !ok {
+		return fmt.Errorf("BPF map %q does not have BTF info for values", traceMap.Name)
+	}
+
+	found := false
+
+	// TODO: this is weird but we need to check the map name as the tracer name can be
+	// different.
+	for _, t := range m.Tracers {
+		if t.MapName == traceMap.Name {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		log.Debugf("Adding tracer %q", traceMap.Name)
+		m.Tracers[traceMap.Name] = Tracer{
+			MapName:    traceMap.Name,
+			StructName: traceMapStruct.Name,
+		}
+	} else {
+		log.Debugf("Tracer using map %q already defined, skipping", traceMap.Name)
+	}
+
+	gadgetStruct := m.Structs[traceMapStruct.Name]
+	existingFields := make(map[string]struct{})
+	for _, field := range gadgetStruct.Fields {
+		existingFields[field.Name] = struct{}{}
+	}
+
+	for _, member := range traceMapStruct.Members {
+		// skip some specific members
+		if member.Name == "timestamp" {
+			log.Debug("Ignoring timestamp column: see https://github.com/inspektor-gadget/inspektor-gadget/issues/2000")
+			continue
+		}
+		// TODO: temporary disable mount ns as it'll be duplicated otherwise
+		if member.Type.TypeName() == gadgets.MntNsIdTypeName {
+			continue
+		}
+
+		// check if column already exists
+		if _, ok := existingFields[member.Name]; ok {
+			log.Debugf("Column %q already exists, skipping", member.Name)
+			continue
+		}
+
+		log.Debugf("Adding column %q", member.Name)
+		field := Field{
+			Name:        member.Name,
+			Description: "TODO: Fill field description",
+			Attributes: FieldAttributes{
+				Width:     16,
+				Alignment: AlignmentLeft,
+				Ellipsis:  EllipsisEnd,
+			},
+		}
+
+		gadgetStruct.Fields = append(gadgetStruct.Fields, field)
+	}
+
+	m.Structs[traceMapStruct.Name] = gadgetStruct
+
+	return nil
+}
+
+// getTracerMapFromeBPF returns the tracer map from the eBPF object.
+// Only the first one is returned
+func getTracerMapFromeBPF(spec *ebpf.CollectionSpec) *ebpf.MapSpec {
+	var mapName string
+
+	it := spec.Types.Iterate()
+	for it.Next() {
+		v, ok := it.Type.(*btf.Var)
+		if !ok {
+			continue
+		}
+
+		// TODO: add more checks here.
+
+		if strings.HasPrefix(v.Name, gadgets.TraceMapPrefix) {
+			mapName = strings.TrimPrefix(v.Name, gadgets.TraceMapPrefix)
+			break
+		}
+	}
+
+	if mapName == "" {
+		return nil
+	}
+
+	for _, m := range spec.Maps {
+		if m.Name != mapName {
+			continue
+		}
+
+		if m.Type != ebpf.RingBuf && m.Type != ebpf.PerfEventArray {
+			continue
+		}
+
+		return m
+	}
+
+	return nil
 }
