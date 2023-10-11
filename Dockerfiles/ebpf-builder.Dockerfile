@@ -4,7 +4,7 @@ ARG LIBBPF_VERSION=v1.2.2
 # Args need to be redefined on each stage
 # https://docs.docker.com/engine/reference/builder/#understand-how-arg-and-from-interact
 
-FROM golang:1.19 as builder
+FROM golang:1.20 as builder
 ARG LIBBPF_VERSION
 
 # Let's install libbpf headers
