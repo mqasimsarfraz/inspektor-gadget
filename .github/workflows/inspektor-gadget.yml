@@ -290,6 +290,18 @@ jobs:
         # - latest commit of btfhub
         # - hash of all bpf objects
         key: btfgen-${{ matrix.platform }}-${{ steps.get-btfhub-head.outputs.head }}-${{ hashFiles('pkg/**/*.o') }}
+    - name: Set ebpf-builder repository and determine image tag
+      if: startsWith(github.ref_name, 'v')
+      id: set-ebpf-builder-repo-and-determine-image-tag
+      uses: ./.github/actions/set-container-repo-and-determine-image-tag
+      with:
+        registry: ${{ env.REGISTRY }}
+        container-image: ${{ github.repository_owner }}/ebpf-builder
+    - name: Set ebpf-builder image name
+      if: startsWith(github.ref_name, 'v')
+      id: set-ebpf-builder-image-name
+      run: |
+        echo "name=${{ steps.set-ebpf-builder-repo-and-determine-image-tag.outputs.container-repo }}:${{ steps.set-ebpf-builder-repo-and-determine-image-tag.outputs.image-tag }}" >> $GITHUB_OUTPUT
     - name: Build ig-linux-${{ matrix.platform }}
       run: |
         if [ "${{ matrix.platform }}" = 'arm64' ]; then
@@ -297,7 +309,7 @@ jobs:
           sudo apt-get install qemu-user-static
         fi
 
-        make ig-linux-${{ matrix.platform }}
+        make EBPF_BUILDER=${{ steps.set-ebpf-builder-image-name.outputs.name || env.DEFAULT_EBPF_BUILDER_IMAGE }} ig-linux-${{ matrix.platform }}
 
         # Prepare assets for release and actions artifacts
         mkdir ${{ matrix.platform }}
