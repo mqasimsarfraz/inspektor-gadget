@@ -84,6 +84,7 @@ var (
 	nodeSelector        string
 	experimentalVar     bool
 	skipSELinuxOpts     bool
+	gadgetPullSecret    string
 )
 
 var supportedHooks = []string{"auto", "crio", "podinformer", "nri", "fanotify", "fanotify+ebpf"}
@@ -162,6 +163,11 @@ func init() {
 		"skip-selinux-opts", "",
 		false,
 		"skip setting SELinux options on the gadget pod")
+	deployCmd.PersistentFlags().StringVarP(
+		&gadgetPullSecret,
+		"gadget-pull-secret", "",
+		"",
+		"secret used to pull the gadget OCI images")
 	rootCmd.AddCommand(deployCmd)
 }
 
@@ -389,6 +395,12 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return commonutils.WrapInErrSetupK8sClient(err)
 	}
 
+	if gadgetPullSecret != "" {
+		if _, err = k8sClient.CoreV1().Secrets(utils.GadgetNamespace).Get(context.TODO(), gadgetPullSecret, metav1.GetOptions{}); err != nil {
+			return fmt.Errorf("getting secret %q in namespace %q: %w", gadgetPullSecret, utils.GadgetNamespace, err)
+		}
+	}
+
 	for _, object := range objects {
 		var currentGadgetDS *appsv1.DaemonSet
 
@@ -471,6 +483,29 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 			currentGadgetDS, _ = k8sClient.AppsV1().DaemonSets(utils.GadgetNamespace).Get(
 				context.TODO(), "gadget", metav1.GetOptions{},
 			)
+
+			// handle gadget pull secret
+			if gadgetPullSecret != "" {
+				daemonSet.Spec.Template.Spec.Volumes = append(daemonSet.Spec.Template.Spec.Volumes, v1.Volume{
+					Name: "gadget-pull-secret",
+					VolumeSource: v1.VolumeSource{
+						Secret: &v1.SecretVolumeSource{
+							SecretName: gadgetPullSecret,
+							Items: []v1.KeyToPath{
+								{
+									Key:  ".dockerconfigjson",
+									Path: "config.json",
+								},
+							},
+						},
+					},
+				})
+				gadgetContainer.VolumeMounts = append(gadgetContainer.VolumeMounts, v1.VolumeMount{
+					Name:      "gadget-pull-secret",
+					MountPath: "/var/run/secrets/gadget/gadget-pull-secret",
+					ReadOnly:  true,
+				})
+			}
 		}
 
 		if printOnly {

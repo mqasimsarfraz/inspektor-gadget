@@ -29,9 +29,13 @@ import (
 	nriv1 "github.com/containerd/nri/types/v1"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/utils/host"
 	"golang.org/x/sys/unix"
+
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/oci"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/utils/host"
 )
+
+const gadgetPullSecretPath = "/var/run/secrets/gadget/gadget-pull-secret/config.json"
 
 var crioRegex = regexp.MustCompile(`1:name=systemd:.*/crio-[0-9a-f]*\.scope`)
 
@@ -194,6 +198,25 @@ func installNRIHooks() error {
 	return nil
 }
 
+func prepareGadgetPullSecret() error {
+	if _, err := os.Stat(gadgetPullSecretPath); err != nil {
+		return nil
+	}
+
+	log.Info("Preparing gadget pull secret")
+
+	err := os.MkdirAll("/var/lib/ig", 0o755)
+	if err != nil {
+		return fmt.Errorf("creating /var/lib/ig: %w", err)
+	}
+	err = copyFile(oci.DefaultAuthFile, gadgetPullSecretPath, 0o640)
+	if err != nil {
+		return fmt.Errorf("copying: %w", err)
+	}
+
+	return nil
+}
+
 func main() {
 	if _, err := os.Stat(filepath.Join(host.HostRoot, "/bin")); os.IsNotExist(err) {
 		log.Fatalf("%s must be executed in a pod with access to the host via %s", os.Args[0], host.HostRoot)
@@ -223,6 +246,11 @@ func main() {
 	}
 
 	log.Infof("Inspektor Gadget version: %s", os.Getenv("INSPEKTOR_GADGET_VERSION"))
+
+	err = prepareGadgetPullSecret()
+	if err != nil {
+		log.Fatalf("preparing gadget pull secret: %v", err)
+	}
 
 	path := "/proc/self/cgroup"
 	content, err := os.ReadFile(path)
