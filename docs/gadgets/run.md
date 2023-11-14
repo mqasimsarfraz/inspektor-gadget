@@ -57,6 +57,34 @@ ubuntu-hirsute         default                mypod2                 mypod2     
 ubuntu-hirsute         default                mypod2                 mypod2                 242164  cat         0        0        3   /dev/null
 ```
 
+### Private registries
+
+In order to use a private registry, you will need a Kubernetes secret with the credentials to access the registry. Start by creating namespace `gadget`, if it doesn't exist:
+
+```bash
+$ kubectl create namespace gadget
+```
+
+Then create the secret:
+
+```bash
+$ kubectl create secret docker-registry regcred -n gadget --docker-server=MYSERVER --docker-username=MYUSERNAME --docker-password=MYPASSWORD
+````
+
+or you can create the secret from a file:
+
+```bash
+$ kubectl create secret docker-registry regcred -n gadget --from-file=.dockerconfigjson=$HOME/.docker/config.json
+```
+
+deploy the gadget pods with `gadget-pull-secret` to use the secret:
+
+```bash
+$ kubectl gadget deploy --gadget-pull-secret=regcred
+```
+
+You can also use `--set config.gadgetPullSecret=regcred` with helm installation to achieve the same result.
+
 ## With `ig`
 
 ``` bash
