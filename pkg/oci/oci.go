@@ -29,16 +29,20 @@ import (
 	"github.com/docker/cli/cli/config/configfile"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	log "github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content/oci"
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry/remote"
 	oras_auth "oras.land/oras-go/v2/registry/remote/auth"
+
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/k8sutil"
 )
 
 type AuthOptions struct {
-	AuthFile string
-	Insecure bool
+	AuthFile         string
+	GadgetPullSecret string
+	Insecure         bool
 }
 
 const (
@@ -342,28 +346,46 @@ func newAuthClient(repository string, authOptions *AuthOptions) (*oras_auth.Clie
 	var cfg *configfile.ConfigFile
 	var err error
 
-	authFileReader, err := os.Open(authOptions.AuthFile)
-	if err != nil {
-		// If the AuthFile was not set explicitly, we allow to fall back to the docker auth,
-		// otherwise we fail to avoid masking an error from the user
-		if !errors.Is(err, os.ErrNotExist) || authOptions.AuthFile != DefaultAuthFile {
-			return nil, fmt.Errorf("opening auth file %q: %w", authOptions.AuthFile, err)
-		}
-
-		log.Debugf("Couldn't find default auth file %q...", authOptions.AuthFile)
-		log.Debugf("Using default docker auth file instead")
-		log.Debugf("$HOME: %q", os.Getenv("HOME"))
-
-		cfg, err = config.Load("")
+	if authOptions.GadgetPullSecret != "" {
+		k8sClient, err := k8sutil.NewClientset("")
 		if err != nil {
-			return nil, fmt.Errorf("loading auth config: %w", err)
+			return nil, fmt.Errorf("creating new k8s clientset: %w", err)
+		}
+		gps, err := k8sClient.CoreV1().Secrets("gadget").Get(context.TODO(), authOptions.GadgetPullSecret, metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("getting secret %q: %w", authOptions.GadgetPullSecret, err)
+		}
+		if gps.Type != "kubernetes.io/dockerconfigjson" {
+			return nil, fmt.Errorf("secret %q is not of type kubernetes.io/dockerconfigjson", authOptions.GadgetPullSecret)
+		}
+		if err := json.Unmarshal(gps.Data[".dockerconfigjson"], cfg); err != nil {
+			return nil, fmt.Errorf("unmarshalling config file: %w", err)
 		}
 	} else {
-		defer authFileReader.Close()
-		cfg, err = config.LoadFromReader(authFileReader)
+		authFileReader, err := os.Open(authOptions.AuthFile)
 		if err != nil {
-			return nil, fmt.Errorf("loading auth config: %w", err)
+			// If the AuthFile was not set explicitly, we allow to fall back to the docker auth,
+			// otherwise we fail to avoid masking an error from the user
+			if !errors.Is(err, os.ErrNotExist) || authOptions.AuthFile != DefaultAuthFile {
+				return nil, fmt.Errorf("opening auth file %q: %w", authOptions.AuthFile, err)
+			}
+
+			log.Debugf("Couldn't find default auth file %q...", authOptions.AuthFile)
+			log.Debugf("Using default docker auth file instead")
+			log.Debugf("$HOME: %q", os.Getenv("HOME"))
+
+			cfg, err = config.Load("")
+			if err != nil {
+				return nil, fmt.Errorf("loading auth config: %w", err)
+			}
+		} else {
+			defer authFileReader.Close()
+			cfg, err = config.LoadFromReader(authFileReader)
+			if err != nil {
+				return nil, fmt.Errorf("loading auth config: %w", err)
+			}
 		}
+
 	}
 
 	hostString, err := getHostString(repository)
