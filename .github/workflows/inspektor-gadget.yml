@@ -1166,6 +1166,7 @@ jobs:
         with:
           test-log-file: integration.log
           test-step-conclusion: ${{ steps.integration-tests.conclusion }}
+          test-summary-suffix: ${{ matrix.runtime }}
 
   build-and-push-gadgets:
     name: Build and push gadgets
@@ -1253,6 +1254,7 @@ jobs:
         with:
           test-log-file: integration.log
           test-step-conclusion: ${{ steps.integration-tests.conclusion }}
+          test-summary-suffix: ${{ matrix.runtime }}
 
   test-integration-aks:
     name: Integration tests on AKS
@@ -1337,6 +1339,7 @@ jobs:
         image_tag: ${{ steps.set-repo-determine-image-tag.outputs.image-tag }}
         gadget_repository: ${{ steps.set-repo-determine-image-tag.outputs.gadget-repository }}
         gadget_tag: ${{ steps.set-repo-determine-image-tag.outputs.gadget-tag }}
+        test_summary_suffix: "${{ matrix.os-sku }}-${{ matrix.arch }}"
     # This step ensures we get fresh credentials before removing the cluster
     - uses: azure/login@v1
       if: always()
@@ -1405,6 +1408,7 @@ jobs:
         image_tag: ${{ steps.set-repo-determine-image-tag.outputs.image-tag }}
         gadget_repository: ${{ steps.set-repo-determine-image-tag.outputs.gadget-repository }}
         gadget_tag: ${{ steps.set-repo-determine-image-tag.outputs.gadget-tag }}
+        test_summary_suffix: "aro"
 
   test-integration-minikube:
     name: Integr. tests
@@ -1459,6 +1463,7 @@ jobs:
         dnstester_image: ${{ needs.build-helper-images.outputs.dnstester_image }}
         gadget_repository: ${{ steps.set-repo-determine-image-tag.outputs.gadget-repository }}
         gadget_tag: ${{ steps.set-repo-determine-image-tag.outputs.gadget-tag }}
+        test_summary_suffix: ${{ matrix.runtime }}
     - if: ${{ matrix.runtime == 'docker' }}
       name: Check that README is up-to-date
       # We do this check here, as we need to run kubectl-gadget against a deployed installation to
@@ -1467,6 +1472,52 @@ jobs:
       shell: bash
       run: |
         perl tools/check-readme.pl ./kubectl-gadget README.md
+
+
+  publish-test-reports:
+    name: Publish test reports
+    # level: 5
+    needs:
+      - test-integration-minikube
+      - test-integration-aks
+      - test-integration-aro
+      - test-integration-k8s-ig
+      - test-integration-non-k8s-ig
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+    - uses: actions/checkout@v4
+    - name: Get all reports
+      uses: actions/download-artifact@v3
+      with:
+        name: "test-reports"
+    - uses: actions/checkout@v4
+      with:
+        repository: mqasimsarfraz/ig-test-reports
+        path: ig-test-reports
+        token: ${{ secrets.TEST_REPORTS_TOKEN }}
+    - name: Store test reports
+      run: |
+        job_dir=ig-test-reports/data
+        if [ ! -d ${job_dir} ]; then
+          mkdir -p ${job_dir}
+          echo '{}' > ${job_dir}/workflows.json
+        fi
+        for i in test-report_*_*.json; do
+          job_key=$(basename $i .json | sed 's/test-report_//')
+          jq --slurpfile obj $i \
+            --arg job_key ${job_key} \
+            '.[$job_key] += $obj' \
+            ${job_dir}/workflows.json > workflows.json.tmp
+          mv workflows.json.tmp ${job_dir}/workflows.json
+        done
+
+        cd ig-test-reports
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global user.name "github-actions[bot]"
+        git add data
+        git commit -m "Add test reports for workflow ${GITHUB_RUN_NUMBER} and attempt ${GITHUB_RUN_ATTEMPT}"
+        git push
 
   release:
     name: Release
