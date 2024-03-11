@@ -24,13 +24,15 @@ import (
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
 
-func TestTraceDns(t *testing.T) {
-	t.Parallel()
-	ns := GenerateTestNamespaceName("test-trace-dns")
+func newTraceDnsCmd(t *testing.T, ns string, uncompress bool) *Command {
+	cmdArgs := ""
+	if uncompress {
+		cmdArgs = "-uncompress"
+	}
 
 	commandsPreTest := []*Command{
 		CreateTestNamespaceCommand(ns),
-		PodCommand("dnstester", *dnsTesterImage, ns, "", ""),
+		PodCommand("dnstester", *dnsTesterImage, ns, `["/dnstester"]`, cmdArgs),
 		WaitUntilPodReadyCommand(ns, "dnstester"),
 	}
 
@@ -229,9 +231,27 @@ func TestTraceDns(t *testing.T) {
 		},
 	}
 
+	return traceDNSCmd
+}
+
+func TestTraceDns(t *testing.T) {
+	t.Parallel()
+	ns := GenerateTestNamespaceName("test-trace-dns")
+
 	// Start the trace gadget and verify the output.
-	commands = []*Command{
-		traceDNSCmd,
+	commands := []*Command{
+		newTraceDnsCmd(t, ns, false),
+	}
+	RunTestSteps(commands, t, WithCbBeforeCleanup(PrintLogsFn(ns)))
+}
+
+func TestTraceDnsWithUncompress(t *testing.T) {
+	t.Parallel()
+	ns := GenerateTestNamespaceName("test-trace-dns-uncompress")
+
+	// Start the trace gadget and verify the output.
+	commands := []*Command{
+		newTraceDnsCmd(t, ns, true),
 	}
 	RunTestSteps(commands, t, WithCbBeforeCleanup(PrintLogsFn(ns)))
 }
