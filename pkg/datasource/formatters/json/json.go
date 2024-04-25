@@ -52,6 +52,7 @@ type Formatter struct {
 	fields            []string
 	showFields        map[string]struct{}
 	hideFields        map[string]struct{}
+	fieldNames        []string
 	allRelativeFields bool
 	useDefault        bool
 	showAll           bool
@@ -217,6 +218,8 @@ func (f *Formatter) addSubFields(accessors []datasource.FieldAccessor, prefix st
 			continue
 		}
 
+		f.fieldNames = append(f.fieldNames, fullFieldName)
+
 		var fn func(e *encodeState, data datasource.Data)
 		// Field doesn't have subfields
 		switch accessor.Type() {
@@ -303,6 +306,10 @@ func (f *Formatter) addSubFields(accessors []datasource.FieldAccessor, prefix st
 		})
 	}
 	return
+}
+
+func (f *Formatter) FieldNames() []string {
+	return f.fieldNames
 }
 
 func (f *Formatter) Marshal(data datasource.Data) []byte {
