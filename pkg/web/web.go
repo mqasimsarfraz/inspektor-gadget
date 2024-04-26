@@ -68,6 +68,14 @@ func (c *sConn) handle() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Send handshake
+	h := &Handshake{
+		// TODO: Hardcoded for now
+		Version: "v0.1.0",
+	}
+	hjson, _ := json.Marshal(h)
+	c.WriteJSON(&GadgetEvent{Type: EventHandshake, Payload: hjson})
+
 	for {
 		command := &Command{}
 		err := c.Conn.ReadJSON(command)
