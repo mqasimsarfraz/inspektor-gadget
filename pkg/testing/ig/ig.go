@@ -29,8 +29,9 @@ import (
 
 // runner is responsible for storing configuration of ig executable and provide methods to interact with.
 type runner struct {
-	path  string
-	image string
+	path        string
+	image       string
+	verifyImage bool
 
 	// command.Command contains *exec.Cmd and additional properties and methods for the same.
 	command.Command
@@ -38,6 +39,9 @@ type runner struct {
 }
 
 func (ig *runner) createCmd() {
+	if !ig.verifyImage {
+		ig.flags = append(ig.flags, "--image-verify=false")
+	}
 	ig.flags = append(ig.flags, "-o=json")
 	args := append([]string{"run", ig.image}, ig.flags...)
 
@@ -85,6 +89,10 @@ func New(image string, opts ...option) igtesting.TestStep {
 	if tag != "" {
 		image = fmt.Sprintf("%s:%s", image, tag)
 	}
+	verifyImage := true
+	if os.Getenv("VERIFY_IMAGE") == "false" {
+		verifyImage = false
+	}
 
 	ig := &runner{
 		path:  "ig",
@@ -92,6 +100,7 @@ func New(image string, opts ...option) igtesting.TestStep {
 		Command: command.Command{
 			Name: commandName,
 		},
+		verifyImage: verifyImage,
 	}
 
 	if path, ok := os.LookupEnv("IG"); ok {

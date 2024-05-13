@@ -2,6 +2,7 @@ SHELL := /bin/bash
 
 GADGET_TAG ?= $(shell ../tools/image-tag branch)
 GADGET_REPOSITORY ?= ghcr.io/inspektor-gadget/gadget
+GADGET_VERIFY_IMAGE ?= true
 BUILDER_IMAGE ?= ghcr.io/inspektor-gadget/ebpf-builder:latest
 IG ?= ig
 COSIGN ?= cosign
@@ -64,6 +65,7 @@ clean:
 test: build
 	CGO_ENABLED=0 \
 	IG_EXPERIMENTAL=true \
+	GADGET_VERIFY_IMAGE=$(GADGET_VERIFY_IMAGE) \
 	GADGET_REPOSITORY=$(GADGET_REPOSITORY) \
 	GADGET_TAG=$(GADGET_TAG) \
 	IG=$(IG) \
