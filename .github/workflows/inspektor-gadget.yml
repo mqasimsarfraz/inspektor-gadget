@@ -715,7 +715,6 @@ jobs:
     if: github.event_name != 'pull_request'
     needs:
       - build-gadget-container-images
-      - public-key-check
       - check-secrets
     runs-on: ubuntu-latest
     permissions:
@@ -767,16 +766,41 @@ jobs:
 
           image_digest=$(docker buildx imagetools inspect $IMAGE_TAG | grep 'Digest' | awk '{ print $2 }')
           echo "image-digest=${image_digest}" >> $GITHUB_OUTPUT
+
+  sign-gadget-images-manifest:
+    name: Sign gadget img manifest
+    # level: 3
+    needs:
+      - public-key-check
+      - publish-gadget-images-manifest
+    runs-on: ubuntu-latest
+    permissions:
+      # allow publishing container image
+      # in case of public fork repo/packages permissions will always be read
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set container repository and determine image tag
+        id: set-repo-determine-image-tag
+        uses: ./.github/actions/set-container-repo-and-determine-image-tag
+        with:
+          registry: ${{ env.REGISTRY }}
+          container-image: ${{ env.CONTAINER_REPO }}
       - name: Install Cosign
-        if: needs.check-secrets.outputs.cosign == 'true'
         uses: sigstore/cosign-installer@main
       - name: Sign the manifest list
-        if: needs.check-secrets.outputs.cosign == 'true'
         env:
           COSIGN_PASSWORD: '${{ secrets.COSIGN_PASSWORD }}'
           COSIGN_PRIVATE_KEY: '${{ secrets.COSIGN_PRIVATE_KEY }}'
         run: |
-          cosign sign --key env://COSIGN_PRIVATE_KEY --yes --recursive "${{ steps.set-repo-determine-image-tag.outputs.container-repo }}@${{ steps.publish-manifest-list.outputs.image-digest }}"
+          cosign sign --key env://COSIGN_PRIVATE_KEY --yes --recursive "${{ steps.set-repo-determine-image-tag.outputs.container-repo }}@${{ needs.publish-gadget-images-manifest.outputs.image-digest }}"
 
   publish-ig-images-manifest:
     name: Publish ig img manifest
@@ -1229,11 +1253,12 @@ jobs:
     # to secrets.
     # Also, unless specified in the secrets configuration, dependabot cannot access
     # to secrets.
-    # So, we skip this job when run by dependabot and from a PR coming from a
-    # fork.
+    # So, this job will be skipped when run by dependabot (if no secrets configured) and
+    # from a PR coming from a fork.
     # We still need to run this job on push, otherwise it will not be run when
-    # we merge something on main.
-    if: github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') && needs.check-secrets.outputs.cosign == 'true'
+    # we merge something on main. Also, we ensure this job will always run on
+    # for 'inspektor-gadget/inspektor-gadget' respository
+    if: needs.check-secrets.outputs.cosign == 'true' || (github.event_name == 'push' && github.repository == 'inspektor-gadget/inspektor-gadget')
     steps:
       - uses: actions/checkout@v4
       - name: Install Cosign
