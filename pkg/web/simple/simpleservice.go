@@ -1,4 +1,4 @@
-// Copyright 2023-2024 The Inspektor Gadget authors
+// Copyright 2023 The Inspektor Gadget authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,23 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package web
+package simple
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
+	"net"
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	dsjson "github.com/inspektor-gadget/inspektor-gadget/pkg/datasource/formatters/json"
-
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/datasource"
+	dsjson "github.com/inspektor-gadget/inspektor-gadget/pkg/datasource/formatters/json"
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-service/api"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
@@ -38,25 +37,19 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/runtime"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
-
-type WebSocketServer struct {
+type StreamingServer struct {
 	runtime runtime.Runtime
 }
 
-func NewWebServer(runtime runtime.Runtime) *WebSocketServer {
-	return &WebSocketServer{
+func NewStreamingServer(runtime runtime.Runtime) *StreamingServer {
+	return &StreamingServer{
 		runtime: runtime,
 	}
 }
 
 type sConn struct {
-	*websocket.Conn
-	srv        *WebSocketServer
+	net.Conn
+	srv        *StreamingServer
 	runtime    runtime.Runtime
 	gadgets    map[string]*gadgetcontext.GadgetContext
 	gadgetLock sync.Mutex
@@ -68,17 +61,14 @@ func (c *sConn) handle() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Send handshake
-	h := &Handshake{
-		// TODO: Hardcoded for now
-		Version: "v0.1.0",
-	}
-	hjson, _ := json.Marshal(h)
-	c.WriteJSON(&GadgetEvent{Type: EventHandshake, Payload: hjson})
-
-	for {
+	scanner := bufio.NewScanner(c.Conn)
+	for scanner.Scan() {
+		if scanner.Err() != nil {
+			log.Warnf("reading: %v", scanner.Err())
+			return
+		}
 		command := &Command{}
-		err := c.Conn.ReadJSON(command)
+		err := json.Unmarshal(scanner.Bytes(), command)
 		if err != nil {
 			log.Warnf("reading JSON: %v", err)
 			return
@@ -165,13 +155,13 @@ func (c *sConn) stopGadget(id string) error {
 
 func (c *sConn) WriteError(cmd *Command, err error) error {
 	p, _ := json.Marshal(err.Error())
-	return c.Conn.WriteJSON(&GadgetEvent{ID: cmd.ID, Type: 255, Payload: p})
+	return c.WriteJSON(&GadgetEvent{ID: cmd.ID, Type: 255, Payload: p})
 }
 
 func (c *sConn) WriteJSON(payload any) error {
 	c.connLock.Lock()
 	defer c.connLock.Unlock()
-	return c.Conn.WriteJSON(payload)
+	return c.encoder.Encode(payload)
 }
 
 func (c *sConn) startGadget(ctx context.Context, request *GadgetStartRequest) error {
@@ -345,22 +335,22 @@ func (c *sConn) startGadget(ctx context.Context, request *GadgetStartRequest) er
 	return nil
 }
 
-func (s *WebSocketServer) Run(network, addr string) error {
-	srv := http.NewServeMux()
-	srv.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		c, err := upgrader.Upgrade(w, r, nil)
+func (s *StreamingServer) Run(network, addr string) error {
+	listener, err := net.Listen(network, addr)
+	if err != nil {
+		panic(err)
+	}
+	for {
+		conn, err := listener.Accept()
 		if err != nil {
-			log.Print("upgrade:", err)
-			return
+			return err
 		}
-		defer c.Close()
-		(&sConn{
-			Conn:    c,
+		go (&sConn{
+			Conn:    conn,
 			srv:     s,
 			runtime: s.runtime,
 			gadgets: map[string]*gadgetcontext.GadgetContext{},
+			encoder: json.NewEncoder(conn),
 		}).handle()
-	})
-	log.Printf("listening on %s", addr)
-	return http.ListenAndServe(addr, srv)
+	}
 }
