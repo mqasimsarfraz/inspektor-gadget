@@ -41,7 +41,9 @@ import (
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/all-gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	ocihandler "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/oci-handler"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/runtime/local"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/utils/experimental"
+	websimple "github.com/inspektor-gadget/inspektor-gadget/pkg/web/simple"
 
 	// The script gadget is designed only to work in k8s, hence it's not part of all-gadgets
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/script"
@@ -350,6 +352,14 @@ func main() {
 			})
 			if err != nil {
 				log.Fatalf("starting gadget service: %v", err)
+			}
+		}()
+
+		ss := websimple.NewStreamingServer(local.New())
+		go func() {
+			err := ss.Run("tcp", "127.0.0.1:8081")
+			if err != nil {
+				log.Fatalf("starting streaming server: %v", err)
 			}
 		}()
 
