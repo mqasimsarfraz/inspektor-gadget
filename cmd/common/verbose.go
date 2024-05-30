@@ -17,21 +17,22 @@ package common
 import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/config"
+	configDefaults "github.com/inspektor-gadget/inspektor-gadget/pkg/config/defaults"
 )
 
-var Verbose bool
-
 func checkVerboseFlag() {
-	if Verbose {
+	if config.Config.Verbose {
 		log.SetLevel(log.DebugLevel)
 	}
 }
 
 func AddVerboseFlag(rootCmd *cobra.Command) {
-	rootCmd.PersistentFlags().BoolVarP(
-		&Verbose,
-		"verbose", "v",
-		false,
+	rootCmd.PersistentFlags().BoolP(
+		config.Verbose,
+		"v",
+		configDefaults.Verbose,
 		"Print debug information",
 	)
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {

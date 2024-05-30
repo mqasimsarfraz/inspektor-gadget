@@ -20,11 +20,11 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-
 	// Import this early to set the enrivonment variable before any other package is imported
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/environment/local"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	ocihandler "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/oci-handler"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/utils/host"
 
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/common"
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/common/image"
@@ -32,8 +32,6 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/ig/containers"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/runtime/local"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/utils/experimental"
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/utils/host"
-
 	// This is a blank include that actually imports all gadgets
 	// TODO: traceloop is imported separately because it is not in all-gadgets
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/all-gadgets"
@@ -59,6 +57,7 @@ func main() {
 		Short: "Collection of gadgets for containers",
 	}
 	common.AddVerboseFlag(rootCmd)
+	common.AddConfigHandler(rootCmd)
 
 	host.AddFlags(rootCmd)
 

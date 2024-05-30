@@ -29,6 +29,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	igconfig "github.com/inspektor-gadget/inspektor-gadget/pkg/config"
 )
 
 var (
@@ -57,13 +59,7 @@ type Config struct {
 	AutoMountFilesystems bool
 }
 
-var (
-	autoSdUnitRestartFlag    bool
-	autoMountFilesystemsFlag bool
-	autoWSLWorkaroundFlag    bool
-
-	initDone bool
-)
+var initDone bool
 
 func Init(config Config) error {
 	var err error
@@ -77,7 +73,7 @@ func Init(config Config) error {
 
 	// Apply systemd workaround first because it might start a new process and
 	// exit before the other workarounds.
-	if autoSdUnitRestartFlag {
+	if igconfig.Config.AutoSDUnitRestart {
 		exit, err := autoSdUnitRestart()
 		if exit {
 			if err != nil {
@@ -98,7 +94,7 @@ func Init(config Config) error {
 
 	// The mount workaround could either be applied unconditionally (in the
 	// gadget DaemonSet) or with the flag (in ig).
-	if config.AutoMountFilesystems || autoMountFilesystemsFlag {
+	if config.AutoMountFilesystems || igconfig.Config.AutoMountFilesystems {
 		_, err = autoMountFilesystems(false)
 		if err != nil {
 			return err
@@ -116,7 +112,7 @@ func Init(config Config) error {
 	}
 
 	// The WSL workaround is applied with the flag (in ig).
-	if autoWSLWorkaroundFlag {
+	if igconfig.Config.AutoWSLWorkaround {
 		err = autoWSLWorkaround()
 		if err != nil {
 			return err
@@ -135,11 +131,9 @@ func Init(config Config) error {
 
 // AddFlags adds CLI flags for various workarounds
 func AddFlags(command *cobra.Command) {
-	command.PersistentFlags().BoolVarP(
-		&autoSdUnitRestartFlag,
-		"auto-sd-unit-restart",
-		"",
-		false,
+	command.PersistentFlags().BoolP(
+		igconfig.AutoSDUnitRestart,
+		"", false,
 		"Automatically run in a privileged systemd unit if lacking enough capabilities",
 	)
 
@@ -148,18 +142,15 @@ func AddFlags(command *cobra.Command) {
 	if HostRoot != "" && HostRoot != "/" {
 		automountFilesystemsDefault = true
 	}
-	command.PersistentFlags().BoolVarP(
-		&autoMountFilesystemsFlag,
-		"auto-mount-filesystems",
+	command.PersistentFlags().BoolP(
+		igconfig.AutoMountFilesystems,
 		"",
 		automountFilesystemsDefault,
 		"Automatically mount bpffs, debugfs and tracefs if they are not already mounted",
 	)
-	command.PersistentFlags().BoolVarP(
-		&autoWSLWorkaroundFlag,
-		"auto-wsl-workaround",
-		"",
-		false,
+	command.PersistentFlags().BoolP(
+		igconfig.AutoWSLWorkaround,
+		"", false,
 		"Automatically find the host procfs when running in WSL2",
 	)
 }

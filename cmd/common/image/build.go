@@ -37,8 +37,8 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 
-	"github.com/inspektor-gadget/inspektor-gadget/cmd/common"
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/common/utils"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/config"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/oci"
 )
 
@@ -395,7 +395,7 @@ func buildInContainer(opts *cmdOpts, conf *buildFile) error {
 	case status = <-statusCh:
 	}
 
-	if status.StatusCode != 0 || common.Verbose {
+	if status.StatusCode != 0 || config.Config.Verbose {
 		opts := container.LogsOptions{ShowStdout: true, ShowStderr: true}
 		out, err := cli.ContainerLogs(ctx, resp.ID, opts)
 		if err != nil {
