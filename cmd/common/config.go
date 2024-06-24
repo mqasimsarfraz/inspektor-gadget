@@ -25,6 +25,13 @@ import (
 
 var configPath string
 
+// TODO: Perhaps this could be params so we can use the same mechanism for both
+var rootFlags = map[string][]string{
+	"gadgetctl":      {"verbose"},
+	"ig":             {"verbose", "auto-sd-unit-restart", "auto-mount-filesystems", "auto-wsl-workaround"},
+	"kubectl-gadget": {"verbose", "request-timeout", "client-certificate", "client-key", "insecure-skip-tls-verify", "kubeconfig", "server", "tls-server-name", "token"},
+}
+
 // AddConfigFlag adds the --config flag to the command
 func AddConfigFlag(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVarP(&configPath, "config", "", "", "config file to use")
@@ -32,6 +39,10 @@ func AddConfigFlag(cmd *cobra.Command) {
 
 // InitConfig initializes the config by reading the config file and setting root flags
 func InitConfig(rootCmd *cobra.Command) error {
+	if _, ok := rootFlags[rootCmd.Name()]; !ok {
+		return fmt.Errorf("root flags not defined for %s", rootCmd.Name())
+	}
+
 	// set the config file path if it is provided
 	if configPath != "" {
 		config.Config = config.NewWithPath(configPath)
@@ -39,6 +50,25 @@ func InitConfig(rootCmd *cobra.Command) error {
 
 	// we do not want to fail if the config file is not found
 	config.Config.ReadInConfig()
+
+	// set the root flags based on the config
+	for _, fn := range rootFlags[rootCmd.Name()] {
+		f := rootCmd.PersistentFlags().Lookup(fn)
+		if f == nil {
+			return fmt.Errorf("flag %s not found", fn)
+		}
+
+		// Bind the env variable to the flag
+		config.Config.BindEnv(fn)
+
+		// Apply the config value to the flag when the flag is not set and env/config value is set
+		if !f.Changed && config.Config.IsSet(f.Name) {
+			err := f.Value.Set(config.Config.GetString(f.Name))
+			if err != nil {
+				return fmt.Errorf("setting flag %s: %w", f.Name, err)
+			}
+		}
+	}
 
 	return nil
 }
