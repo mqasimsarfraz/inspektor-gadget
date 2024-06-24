@@ -57,6 +57,7 @@ func main() {
 		log.Info("Experimental features enabled")
 	}
 
+	common.AddConfigFlag(rootCmd)
 	common.AddVerboseFlag(rootCmd)
 
 	// Some commands don't need the gadget namespace. Run then before to avoid
@@ -97,6 +98,14 @@ func main() {
 		// Analogous to cobra error message
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
+	}
+
+	// ensure that the runtime flags are set from the config file
+	if err = common.InitConfig(rootCmd); err != nil {
+		log.Fatalf("initializing config: %v", err)
+	}
+	if err = common.SetFlagsForParams(rootCmd, runtimeGlobalParams, "runtime."); err != nil {
+		log.Fatalf("setting runtime flags from config: %v", err)
 	}
 
 	namespace, _ := utils.GetNamespace()

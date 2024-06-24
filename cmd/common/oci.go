@@ -75,6 +75,20 @@ func NewRunCommand(rootCmd *cobra.Command, runtime runtime.Runtime, hiddenColumn
 			}
 			defer runtime.Close()
 
+			// set global operator flags from the config file
+			for o, p := range opGlobalParams {
+				err = SetFlagsForParams(cmd, p, "operator."+o+".")
+				if err != nil {
+					return fmt.Errorf("setting operator %s flags: %w", o, err)
+				}
+			}
+
+			// set global oci flags from the config file
+			err = SetFlagsForParams(cmd, ociParams, "operator.oci.")
+			if err != nil {
+				return fmt.Errorf("setting oci flags: %w", err)
+			}
+
 			// we need to re-enable flag parsing, as utils.ParseEarlyFlags() would
 			// not do anything otherwise
 			cmd.DisableFlagParsing = false

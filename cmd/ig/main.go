@@ -61,6 +61,7 @@ func main() {
 		Use:   "ig",
 		Short: "Collection of gadgets for containers",
 	}
+	common.AddConfigFlag(rootCmd)
 	common.AddVerboseFlag(rootCmd)
 
 	host.AddFlags(rootCmd)
@@ -80,6 +81,15 @@ func main() {
 	}
 
 	runtime := local.New()
+
+	// ensure that the runtime flags are set from the config file
+	if err = common.InitConfig(rootCmd); err != nil {
+		log.Fatalf("initializing config: %v", err)
+	}
+	if err = common.SetFlagsForParams(rootCmd, runtime.GlobalParamDescs().ToParams(), "runtime."); err != nil {
+		log.Fatalf("setting runtime flags from config: %v", err)
+	}
+
 	hiddenColumnTags := []string{"kubernetes"}
 	common.AddCommandsFromRegistry(rootCmd, runtime, hiddenColumnTags)
 
