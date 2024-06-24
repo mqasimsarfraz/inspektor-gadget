@@ -16,11 +16,20 @@ package common
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
+	"github.com/inspektor-gadget/inspektor-gadget/cmd/common/utils"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/config"
+	apihelpers "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-service/api-helpers"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
+	ocihandler "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/oci-handler"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/runtime"
 )
 
 var configPath string
@@ -98,4 +107,74 @@ func SetFlagsForParams(cmd *cobra.Command, params *params.Params, configPrefix s
 		}
 	}
 	return nil
+}
+
+func NewConfigCmd(runtime runtime.Runtime) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "config",
+		Short: "Configuration commands",
+	}
+	defaultCmd := &cobra.Command{
+		Use:   "default",
+		Short: "Print the default configuration",
+	}
+	viewCmd := &cobra.Command{
+		Use:   "view",
+		Short: "Print the current configuration",
+	}
+	cmd.AddCommand(defaultCmd)
+	cmd.AddCommand(viewCmd)
+	AddConfigFlag(cmd)
+
+	defaultCmd.Run = func(cmd *cobra.Command, args []string) {
+		var defaultConfig struct {
+			RuntimeConfig  map[string]string            `yaml:"runtime"`
+			OperatorConfig map[string]map[string]string `yaml:"operator"`
+			RootConfig     map[string]string            `yaml:",inline"`
+		}
+
+		runtimeConfig := make(map[string]string)
+		runtime.GlobalParamDescs().ToParams().CopyToMap(runtimeConfig, "")
+		defaultConfig.RuntimeConfig = runtimeConfig
+
+		opConfig := make(map[string]map[string]string)
+		for _, op := range operators.GetDataOperators() {
+			opConfig[strings.ToLower(op.Name())] = make(map[string]string)
+			apihelpers.ToParamDescs(op.GlobalParams()).ToParams().CopyToMap(opConfig[strings.ToLower(op.Name())], "")
+		}
+
+		opConfig["oci"] = make(map[string]string)
+		apihelpers.ToParamDescs(ocihandler.OciHandler.InstanceParams()).ToParams().CopyToMap(opConfig["oci"], "")
+		defaultConfig.OperatorConfig = opConfig
+
+		defaultConfig.RootConfig = make(map[string]string)
+		for _, fn := range rootFlags[cmd.Root().Name()] {
+			f := cmd.Root().PersistentFlags().Lookup(fn)
+			if f == nil {
+				log.Fatalf("flag %s not found", fn)
+			}
+			defaultConfig.RootConfig[fn] = f.DefValue
+		}
+
+		out, err := yaml.Marshal(defaultConfig)
+		if err != nil {
+			log.Fatalf("failed to marshal config: %v", err)
+		}
+
+		fmt.Print(string(out))
+	}
+
+	viewCmd.Run = func(cmd *cobra.Command, args []string) {
+		cp := config.Config.ConfigFileUsed()
+		if configPath != "" {
+			cp = configPath
+		}
+		cfg, err := os.ReadFile(cp)
+		if err != nil {
+			log.Fatalf("failed to read config: %v", err)
+		}
+		fmt.Print(string(cfg))
+	}
+
+	return utils.MarkExperimental(cmd)
 }
