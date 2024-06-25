@@ -50,11 +50,20 @@ func SetFlagsForParams(cmd *cobra.Command, params *params.Params, configPrefix s
 		if f == nil {
 			continue
 		}
-		// Apply the config value to the flag when the flag is not set and config value is set
-		if !f.Changed && config.Config.IsSet(configPrefix+k) {
-			err := f.Value.Set(config.Config.GetString(configPrefix + k))
-			if err != nil {
-				return fmt.Errorf("setting flag %s: %w", k, err)
+
+		// Apply the config value to the flag when the flag is not set and env/config value is set
+		if !f.Changed {
+			// we need to bind env without the prefix to avoid long names like INSPEKTOR_GADGET_OPERATOR_NAME_KEY
+			config.Config.BindEnv(k)
+
+			if config.Config.IsSet(k) {
+				if err := f.Value.Set(config.Config.GetString(k)); err != nil {
+					return fmt.Errorf("setting flag from env %s: %w", k, err)
+				}
+			} else if config.Config.IsSet(configPrefix + k) {
+				if err := f.Value.Set(config.Config.GetString(configPrefix + k)); err != nil {
+					return fmt.Errorf("setting flag from config %s: %w", configPrefix+k, err)
+				}
 			}
 		}
 	}

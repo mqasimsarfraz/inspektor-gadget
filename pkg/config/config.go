@@ -17,13 +17,15 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 )
 
 const (
-	configName = "config"
-	configType = "yaml"
+	configName      = "config"
+	configType      = "yaml"
+	configEnvPrefix = "INSPEKTOR_GADGET"
 )
 
 var Config *viper.Viper
@@ -35,12 +37,18 @@ func init() {
 	Config.SetConfigName(configName)
 	Config.SetConfigType(configType)
 	Config.AddConfigPath(filepath.Join(h, ".ig"))
+
+	Config.SetEnvPrefix(configEnvPrefix)
+	Config.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 }
 
 func NewWithPath(path string) *viper.Viper {
 	v := viper.New()
 	v.SetConfigFile(path)
 	v.SetConfigType(configType)
+
+	v.SetEnvPrefix(configEnvPrefix)
+	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 
 	return v
 }
