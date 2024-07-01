@@ -123,6 +123,11 @@ func (l *LocalManager) GlobalParamDescs() params.ParamDescs {
 			DefaultValue: "internal",
 			Description:  "Container runtime protocol. Supported values are: internal, cri",
 		},
+		{
+			Key:          "verbose",
+			DefaultValue: "false",
+			Description:  "Enable verbose logging",
+		},
 	}
 }
 
