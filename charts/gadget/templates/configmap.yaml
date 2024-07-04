@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- if not .Values.skipLabels }}
+  labels:
+    {{- include "gadget.labels" . | nindent 4 }}
+  {{- end }}
+  name: {{ include "gadget.fullname" . }}
+  namespace: {{ include "gadget.namespace" . }}
+data:
+    config.yaml: |-
+      hook-mode: {{ .Values.config.hookMode }}
+      fallback-pod-informer: {{ .Values.config.fallbackPodInformer }}
+      events-buffer-length: {{ .Values.config.eventsBufferLength }}
