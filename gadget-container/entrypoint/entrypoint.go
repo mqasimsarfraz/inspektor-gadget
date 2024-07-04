@@ -30,6 +30,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/config"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/config/gadgettracermanagerconfig"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/oci"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/utils/gadgettracermanagerloglevel"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/utils/host"
@@ -220,6 +222,11 @@ func prepareGadgetPullSecret() error {
 }
 
 func main() {
+	config.Config = config.NewWithPath(gadgettracermanagerconfig.ConfigPath)
+	if err := config.Config.ReadInConfig(); err != nil {
+		log.Warnf("reading config: %v", err)
+	}
+
 	tracerManLogLvl := gadgettracermanagerloglevel.LogLevel()
 	log.SetLevel(tracerManLogLvl)
 	if _, err := os.Stat(filepath.Join(host.HostRoot, "/bin")); os.IsNotExist(err) {
@@ -271,6 +278,9 @@ func main() {
 	}
 
 	hookMode := os.Getenv("INSPEKTOR_GADGET_OPTION_HOOK_MODE")
+	if hookMode == "" {
+		hookMode = config.Config.GetString(gadgettracermanagerconfig.HookModeKey)
+	}
 	if (hookMode == "auto" || hookMode == "") && crio {
 		log.Info("Hook mode CRI-O detected")
 		hookMode = "crio"
@@ -310,12 +320,17 @@ func main() {
 		os.Remove(socket)
 	}
 
+	fallbackPodInformer := os.Getenv("INSPEKTOR_GADGET_OPTION_FALLBACK_POD_INFORMER")
+	if fallbackPodInformer == "" {
+		fallbackPodInformer = config.Config.GetString(gadgettracermanagerconfig.FallbackPodInformerKey)
+	}
+
 	args := []string{
 		"gadgettracermanager",
 		"-serve",
 		fmt.Sprintf("-hook-mode=%s", gadgetTracerManagerHookMode),
 		"-controller",
-		fmt.Sprintf("-fallback-podinformer=%s", os.Getenv("INSPEKTOR_GADGET_OPTION_FALLBACK_POD_INFORMER")),
+		fmt.Sprintf("-fallback-podinformer=%s", fallbackPodInformer),
 	}
 
 	err = syscall.Exec("/bin/gadgettracermanager", args, os.Environ())
