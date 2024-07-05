@@ -44,7 +44,9 @@ import (
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/all-gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	ocihandler "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/oci-handler"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/runtime/local"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/utils/experimental"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/web"
 
 	// Blank import for some operators
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/btfgen"
@@ -361,6 +363,14 @@ func main() {
 			})
 			if err != nil {
 				log.Fatalf("starting gadget service: %v", err)
+			}
+		}()
+
+		ss := web.NewWebServer(local.New())
+		go func() {
+			err := ss.Run("tcp", "127.0.0.1:8081")
+			if err != nil {
+				log.Fatalf("starting web server: %v", err)
 			}
 		}()
 
