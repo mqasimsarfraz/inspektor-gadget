@@ -44,18 +44,29 @@ const (
 	allowedDigests        = "allowed-digests"
 )
 
-type ociHandler struct{}
+type ociHandler struct {
+	globalParam *params.Params
+}
 
 func (o *ociHandler) Name() string {
 	return "oci"
 }
 
-func (o *ociHandler) Init(*params.Params) error {
+func (o *ociHandler) Init(params *params.Params) error {
+	o.globalParam = params
 	return nil
 }
 
 func (o *ociHandler) GlobalParams() api.Params {
-	return nil
+	return api.Params{
+		{
+			Key:          publicKey,
+			Title:        "Public key",
+			Description:  "Public key used to verify the image based gadget",
+			DefaultValue: resources.InspektorGadgetPublicKey,
+			TypeHint:     api.TypeString,
+		},
+	}
 }
 
 func (o *ociHandler) InstanceParams() api.Params {
@@ -106,13 +117,6 @@ func (o *ociHandler) InstanceParams() api.Params {
 			Description:  "Verify image using the provided public key",
 			DefaultValue: "true",
 			TypeHint:     api.TypeBool,
-		},
-		{
-			Key:          publicKey,
-			Title:        "Public key",
-			Description:  "Public key used to verify the image based gadget",
-			DefaultValue: resources.InspektorGadgetPublicKey,
-			TypeHint:     api.TypeString,
 		},
 		{
 			Key:         allowedDigests,
@@ -191,12 +195,14 @@ func (o *OciHandlerInstance) init(gadgetCtx operators.GadgetContext) error {
 		},
 		VerifyOptions: oci.VerifyOptions{
 			VerifyPublicKey: o.ociParams.Get(verifyImage).AsBool(),
-			PublicKey:       o.ociParams.Get(publicKey).AsString(),
+			PublicKey:       o.ociHandler.globalParam.Get(publicKey).AsString(),
 		},
 		AllowedDigestsOptions: oci.AllowedDigestsOptions{
 			AllowedDigests: o.ociParams.Get(allowedDigests).AsStringSlice(),
 		},
 	}
+
+	gadgetCtx.Logger().Infof("image options: %+v", imgOpts)
 
 	target := gadgetCtx.OrasTarget()
 	// If the target wasn't explicitly set, use the local store. In this case we

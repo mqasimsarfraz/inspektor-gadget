@@ -13,3 +13,7 @@ data:
       hook-mode: {{ .Values.config.hookMode }}
       fallback-pod-informer: {{ .Values.config.fallbackPodInformer }}
       events-buffer-length: {{ .Values.config.eventsBufferLength }}
+      operator:
+        oci:
+          public-key: |
+            {{- .Values.config.gadgetPublicKey | nindent 12 }}
