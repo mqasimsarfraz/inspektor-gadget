@@ -1,7 +1,7 @@
 # Artifact Hub repository metadata file
 # https://github.com/artifacthub/hub/blob/master/docs/metadata/artifacthub-repo.yml
 
-repositoryID: 5f918783-a578-4873-8637-52c7ed102fc9
+repositoryID: 7597688f-b727-40dd-b53a-1538b5f6485a
 owners:
-  - name: The Inspektor Gadget authors
-    email: hello@inspektor-gadget.io
+  - name: Qasim Sarfraz
+    email: syed.qasim.sarfraz@gmail.com
