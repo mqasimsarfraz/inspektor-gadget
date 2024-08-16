@@ -35,6 +35,7 @@ GADGETS = \
 	snapshot_process \
 	snapshot_socket \
 	ci/sched_cls_drop \
+	trace_test \
 	#
 
 DATE=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
