@@ -16,6 +16,7 @@ package common
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -166,6 +167,9 @@ func transformObject(obj any) (any, error) {
 				Labels:          t.Labels,
 				OwnerReferences: t.OwnerReferences,
 			},
+			Spec: v1.PodSpec{
+				NodeName: t.Spec.NodeName,
+			},
 			Status: v1.PodStatus{
 				HostIP: t.Status.HostIP,
 				PodIP:  t.Status.PodIP,
@@ -312,6 +316,9 @@ func (cache *inventoryCache) OnAdd(obj any, _ bool) {
 			log.Warnf("OnAdd: error getting key for pod: %v", err)
 			return
 		}
+		if o.Spec.NodeName != os.Getenv("NODE_NAME") {
+			return
+		}
 		slimPod := NewSlimPod(o)
 		cache.pods.Add(key, slimPod)
 		if ip := slimPod.Status.PodIP; ip != "" {
@@ -341,6 +348,9 @@ func (cache *inventoryCache) OnUpdate(_, newObj any) {
 			log.Warnf("OnUpdate: error getting key for pod: %v", err)
 			return
 		}
+		if o.Spec.NodeName != os.Getenv("NODE_NAME") {
+			return
+		}
 		slimPod := NewSlimPod(o)
 		cache.pods.Add(key, slimPod)
 		if ip := slimPod.Status.PodIP; ip != "" {
@@ -368,6 +378,9 @@ func (cache *inventoryCache) OnDelete(obj any) {
 		key, err := k8sCache.MetaNamespaceKeyFunc(o)
 		if err != nil {
 			log.Warnf("OnDelete: error getting key for pod: %v", err)
+			return
+		}
+		if o.Spec.NodeName != os.Getenv("NODE_NAME") {
 			return
 		}
 		cache.pods.Remove(key)
