@@ -15,13 +15,10 @@
 package tests
 
 import (
-	"os"
-	"path/filepath"
+	"os/exec"
 	"testing"
 	"time"
 	"fmt"
-
-	"github.com/cilium/ebpf"
 
 	gadgettesting "github.com/inspektor-gadget/inspektor-gadget/gadgets/testing"
 	utilstest "github.com/inspektor-gadget/inspektor-gadget/internal/test"
@@ -164,13 +161,13 @@ func generateEvent() (string, error) {
 	cmd := exec.Command("inotifywatch", "/tmp/")
 	err := cmd.Start()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	touchCmd := exec.Command("touch", "/tmp/ABCDE")
 	err = touchCmd.Run()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	return "ABCDE", nil
