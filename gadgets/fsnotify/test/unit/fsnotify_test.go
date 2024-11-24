@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"fmt"
 
 	"github.com/cilium/ebpf"
 
