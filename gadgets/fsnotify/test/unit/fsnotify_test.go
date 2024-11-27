@@ -144,7 +144,7 @@ func TestFsnotifyGadget(t *testing.T) {
 						IWd: utils.NormalizedInt,
 						ICookie: utils.NormalizedInt,
 						IIno: utils.NormalizedInt,
-						IInoDir: utils.NormalizedInt
+						IInoDir: utils.NormalizedInt,
 					}
 				})(t, info, 0, events)
 			},
