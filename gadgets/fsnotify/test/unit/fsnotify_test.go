@@ -227,8 +227,19 @@ func generateEvent() (string, error) {
 		return "", err
 	}
 
-	touchCmd := exec.Command("touch", "/tmp/ABCDE")
-	err = touchCmd.Run()
+	// touchCmd := exec.Command("touch", "/tmp/ABCDE")
+	// err = touchCmd.Run()
+	// if err != nil {
+	// 	return "", err
+	// }
+
+	file, err := os.Create("/tmp/ABCDE")
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	_, err = file.WriteString("herewego")
 	if err != nil {
 		return "", err
 	}
