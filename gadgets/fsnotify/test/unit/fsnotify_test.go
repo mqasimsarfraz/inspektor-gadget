@@ -113,8 +113,8 @@ func TestFsnotifyGadget(t *testing.T) {
 				}
 
 				fmt.Printf("info proc command: %s", info.Proc.Comm)
-				fmt.Printf("info proc pid: %s", info.Proc.Pid)
-				fmt.Printf("info proc tid: %s", info.Proc.Tid)
+				fmt.Printf("info proc pid: %d", info.Proc.Pid)
+				fmt.Printf("info proc tid: %d", info.Proc.Tid)
 
 				utilstest.ExpectAtLeastOneEvent(func(info *utilstest.RunnerInfo, pid int) *ExpectedFsnotifyEvent {
 					return &ExpectedFsnotifyEvent{
