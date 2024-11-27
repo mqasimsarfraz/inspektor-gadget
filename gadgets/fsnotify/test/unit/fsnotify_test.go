@@ -93,7 +93,7 @@ func (e ExpectedFsnotifyEvent) Print() {
 type testDef struct {
 	runnerConfig   *utilstest.RunnerConfig
 	generateEvent  func() (string, error)
-	validateEvent  func(t *testing.T, info *utilstest.RunnerInfo, filepath string, events []ExpectedFsnotifyEvent)
+	validateEvent  func(t *testing.T, info *utilstest.RunnerInfo, filename string, events []ExpectedFsnotifyEvent)
 }
 
 func TestFsnotifyGadget(t *testing.T) {
@@ -104,21 +104,49 @@ func TestFsnotifyGadget(t *testing.T) {
 		"captures_inotify_event": {
 			runnerConfig:  runnerConfig,
 			generateEvent: generateEvent,
-			validateEvent: func(t *testing.T, info *utilstest.RunnerInfo, filepath string, events []ExpectedFsnotifyEvent) {
+			validateEvent: func(t *testing.T, info *utilstest.RunnerInfo, filename string, events []ExpectedFsnotifyEvent) {
 
-				for _, event := range events {
-					event.Print()
-				}
+				// fmt.Printf("--------------------------------------------------\n")
+				// for _, event := range events {
+				// 	event.Print()
+				// 	fmt.Printf("--------------------------------------------------\n")
+				// }
 
-				// utilstest.ExpectAtLeastOneEvent(func(info *utilstest.RunnerInfo, pid int) *ExpectedFsnotifyEvent {
-				// 	return &ExpectedFsnotifyEvent{
-				// 		Timestamp: utils.NormalizedStr,
+				utilstest.ExpectAtLeastOneEvent(func(info *utilstest.RunnerInfo, pid int) *ExpectedFsnotifyEvent {
+					return &ExpectedFsnotifyEvent{
+						Type:  "inotify",
 
-				// 		Type:  "inotify",
-				// 		IMask: 134217736, // 134217736 = 0x08000008 = FS_CLOSE_WRITE | FS_EVENT_ON_CHILD
-				// 		Name:  filepath,
-				// 	}
-				// })(t, info, 0, events)
+						IMask: 134217736, // 134217736 = 0x08000008 = FS_CLOSE_WRITE | FS_EVENT_ON_CHILD
+						Name:  filename,
+
+						Timestamp: utils.NormalizedStr,
+						TraceeProc: info.Proc,
+						TracerProc: info.Proc,
+
+					    TraceeMntnsId: utils.NormalizedInt,
+						TracerMntnsId: utils.NormalizedInt,
+
+						TraceeUId: utils.NormalizedInt,
+						TraceeGId: utils.NormalizedInt,
+						TracerUId: utils.NormalizedInt,
+						TracerGId: utils.NormalizedInt,
+
+						Prio: utils.NormalizedInt,
+						
+						FaMask: utils.NormalizedInt,
+
+						FaType: utils.NormalizedStr,
+						FaPId: utils.NormalizedInt,
+						FaFlags: utils.NormalizedInt,
+						FaFFlags: utils.NormalizedInt,
+						FaResponse: utils.NormalizedStr,
+
+						IWd: utils.NormalizedInt,
+						ICookie: utils.NormalizedInt,
+						IIno: utils.NormalizedInt,
+						IInoDir: utils.NormalizedInt
+					}
+				})(t, info, 0, events)
 			},
 		},
 	}
@@ -126,17 +154,37 @@ func TestFsnotifyGadget(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			var filepath string
+			var filename string
 			runner := utilstest.NewRunnerWithTest(t, testCase.runnerConfig)
 
 			normalizeEvent := func(event *ExpectedFsnotifyEvent) {
 				utils.NormalizeString(&event.Timestamp)
+				utils.NormalizeInt(&event.TraceeMntnsId)
+				utils.NormalizeInt(&event.TracerMntnsId)
 
+				utils.NormalizeInt(&event.TraceeUId)
+				utils.NormalizeInt(&event.TraceeGId)
+				utils.NormalizeInt(&event.TracerUId)
+				utils.NormalizeInt(&event.TracerGId)
+
+				utils.NormalizeInt(&event.Prio)
+				utils.NormalizeInt(&event.FaMask)
+
+				utils.NormalizeString(&event.FaType)
+				utils.NormalizeInt(&event.FaPId)
+				utils.NormalizeInt(&event.FaFlags)
+				utils.NormalizeInt(&event.FaFFlags)
+				utils.NormalizeString(&event.FaResponse)
+
+				utils.NormalizeInt(&event.IWd)
+				utils.NormalizeInt(&event.ICookie)
+				utils.NormalizeInt(&event.IIno)
+				utils.NormalizeInt(&event.IInoDir)
 			}
 			onGadgetRun := func(gadgetCtx operators.GadgetContext) error {
 				utilstest.RunWithRunner(t, runner, func() error {
 					var err error
-					filepath, err = testCase.generateEvent()
+					filename, err = testCase.generateEvent()
 					if err != nil {
 						return err
 					}
@@ -155,7 +203,7 @@ func TestFsnotifyGadget(t *testing.T) {
 
 			gadgetRunner.RunGadget()
 
-			testCase.validateEvent(t, runner.Info, filepath, gadgetRunner.CapturedEvents)
+			testCase.validateEvent(t, runner.Info, filename, gadgetRunner.CapturedEvents)
 		})
 	}
 }
@@ -165,7 +213,7 @@ func generateEvent() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// defer watcher.Close()
+	defer watcher.Close()
 
 	err = watcher.Add("/tmp/")
 	if err != nil {
