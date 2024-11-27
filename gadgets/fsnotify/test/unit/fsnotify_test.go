@@ -25,7 +25,7 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	ebpftypes "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/ebpf/types"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/testing/gadgetrunner"
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/testing/utils"
+	// "github.com/inspektor-gadget/inspektor-gadget/pkg/testing/utils"
 	"github.com/fsnotify/fsnotify"
 )
 
