@@ -26,6 +26,7 @@ import (
 	ebpftypes "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/ebpf/types"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/testing/gadgetrunner"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/testing/utils"
+	"github.com/fsnotify/fsnotify"
 )
 
 type ExpectedFsnotifyEvent struct {
@@ -98,7 +99,7 @@ func TestFsnotifyGadget(t *testing.T) {
 	runnerConfig := &utilstest.RunnerConfig{}
 
 	testCases := map[string]testDef{
-		"captures_events_with_filter": {
+		"captures_inotify_event": {
 			runnerConfig:  runnerConfig,
 			generateEvent: generateEvent,
 			validateEvent: func(t *testing.T, info *utilstest.RunnerInfo, filepath string, events []ExpectedFsnotifyEvent) {
@@ -158,8 +159,13 @@ func TestFsnotifyGadget(t *testing.T) {
 }
 
 func generateEvent() (string, error) {
-	cmd := exec.Command("inotifywatch", "/tmp/")
-	err := cmd.Start()
+    watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return "", err
+	}
+	// defer watcher.Close()
+
+	err = watcher.Add("/tmp/")
 	if err != nil {
 		return "", err
 	}
