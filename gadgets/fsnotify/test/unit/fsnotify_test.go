@@ -241,12 +241,12 @@ func generateEvent() (string, error) {
 }
 
 func TotallyNormalizeProc(p *ebpftypes.Process) {
-	NormalizeString(&p.Comm)
-	NormalizeInt(&p.Pid)
-	NormalizeInt(&p.Tid)
-	NormalizeInt(&p.MntNsID)
-	NormalizeInt(&p.Creds.Uid)
-	NormalizeInt(&p.Creds.Gid)
-	NormalizeInt(&p.Parent.Pid)
-	NormalizeString(&p.Parent.Comm)
+	utils.NormalizeString(&p.Comm)
+	utils.NormalizeInt(&p.Pid)
+	utils.NormalizeInt(&p.Tid)
+	utils.NormalizeInt(&p.MntNsID)
+	utils.NormalizeInt(&p.Creds.Uid)
+	utils.NormalizeInt(&p.Creds.Gid)
+	utils.NormalizeInt(&p.Parent.Pid)
+	utils.NormalizeString(&p.Parent.Comm)
 }
