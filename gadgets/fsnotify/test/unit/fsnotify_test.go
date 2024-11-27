@@ -106,11 +106,11 @@ func TestFsnotifyGadget(t *testing.T) {
 			generateEvent: generateEvent,
 			validateEvent: func(t *testing.T, info *utilstest.RunnerInfo, filename string, events []ExpectedFsnotifyEvent) {
 
-				// fmt.Printf("--------------------------------------------------\n")
-				// for _, event := range events {
-				// 	event.Print()
-				// 	fmt.Printf("--------------------------------------------------\n")
-				// }
+				fmt.Printf("--------------------------------------------------\n")
+				for _, event := range events {
+					event.Print()
+					fmt.Printf("--------------------------------------------------\n")
+				}
 
 				utilstest.ExpectAtLeastOneEvent(func(info *utilstest.RunnerInfo, pid int) *ExpectedFsnotifyEvent {
 					return &ExpectedFsnotifyEvent{
@@ -132,7 +132,6 @@ func TestFsnotifyGadget(t *testing.T) {
 						TracerGId: utils.NormalizedInt,
 
 						Prio: utils.NormalizedInt,
-						
 						FaMask: utils.NormalizedInt,
 
 						FaType: utils.NormalizedStr,
