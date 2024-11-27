@@ -15,8 +15,7 @@
 package tests
 
 import (
-	// "os/exec"
-	"os"
+	"os/exec"
 	"testing"
 	"time"
 	"fmt"
@@ -26,7 +25,7 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	ebpftypes "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/ebpf/types"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/testing/gadgetrunner"
-	// "github.com/inspektor-gadget/inspektor-gadget/pkg/testing/utils"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/testing/utils"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -107,53 +106,53 @@ func TestFsnotifyGadget(t *testing.T) {
 			generateEvent: generateEvent,
 			validateEvent: func(t *testing.T, info *utilstest.RunnerInfo, filename string, events []ExpectedFsnotifyEvent) {
 
-				fmt.Printf("--------------------------------------------------\n")
-				fmt.Printf("YOU ARE LOOKING FOR THIS SECTION\n")
-				fmt.Printf("--------------------------------------------------\n")
-				for _, event := range events {
-					event.Print()
-					fmt.Printf("--------------------------------------------------\n")
-				}
+				// fmt.Printf("--------------------------------------------------\n")
+				// fmt.Printf("YOU ARE LOOKING FOR THIS SECTION\n")
+				// fmt.Printf("--------------------------------------------------\n")
+				// for _, event := range events {
+				// 	event.Print()
+				// 	fmt.Printf("--------------------------------------------------\n")
+				// }
 
-				fmt.Printf("runnerInfo proc command: %s\n", info.Proc.Comm)
-				fmt.Printf("runnerInfo proc pid: %d\n", info.Proc.Pid)
-				fmt.Printf("runnerInfo proc tid: %d\n", info.Proc.Tid)
-				fmt.Printf("--------------------------------------------------\n")
+				// fmt.Printf("runnerInfo proc command: %s\n", info.Proc.Comm)
+				// fmt.Printf("runnerInfo proc pid: %d\n", info.Proc.Pid)
+				// fmt.Printf("runnerInfo proc tid: %d\n", info.Proc.Tid)
+				// fmt.Printf("--------------------------------------------------\n")
 
-				// utilstest.ExpectAtLeastOneEvent(func(info *utilstest.RunnerInfo, pid int) *ExpectedFsnotifyEvent {
-				// 	return &ExpectedFsnotifyEvent{
-				// 		Type:  "inotify",
+				utilstest.ExpectAtLeastOneEvent(func(info *utilstest.RunnerInfo, pid int) *ExpectedFsnotifyEvent {
+					return &ExpectedFsnotifyEvent{
+						Type:  "inotify",
 
-				// 		IMask: 134217736, // 134217736 = 0x08000008 = FS_CLOSE_WRITE | FS_EVENT_ON_CHILD
-				// 		Name:  filename,
+						IMask: 134217736, // 134217736 = 0x08000008 = FS_CLOSE_WRITE | FS_EVENT_ON_CHILD
+						Name:  filename,
 
-				// 		Timestamp: utils.NormalizedStr,
-				// 		TraceeProc: info.Proc,
-				// 		TracerProc: info.Proc,
+						Timestamp: utils.NormalizedStr,
+						TraceeProc: utils.BuildProc("", 0, 0),
+						TracerProc: utils.BuildProc("", 0, 0),
 
-				// 	    TraceeMntnsId: utils.NormalizedInt,
-				// 		TracerMntnsId: utils.NormalizedInt,
+					    TraceeMntnsId: utils.NormalizedInt,
+						TracerMntnsId: utils.NormalizedInt,
 
-				// 		TraceeUId: utils.NormalizedInt,
-				// 		TraceeGId: utils.NormalizedInt,
-				// 		TracerUId: utils.NormalizedInt,
-				// 		TracerGId: utils.NormalizedInt,
+						TraceeUId: utils.NormalizedInt,
+						TraceeGId: utils.NormalizedInt,
+						TracerUId: utils.NormalizedInt,
+						TracerGId: utils.NormalizedInt,
 
-				// 		Prio: utils.NormalizedInt,
-				// 		FaMask: utils.NormalizedInt,
+						Prio: utils.NormalizedInt,
+						FaMask: utils.NormalizedInt,
 
-				// 		FaType: utils.NormalizedStr,
-				// 		FaPId: utils.NormalizedInt,
-				// 		FaFlags: utils.NormalizedInt,
-				// 		FaFFlags: utils.NormalizedInt,
-				// 		FaResponse: utils.NormalizedStr,
+						FaType: utils.NormalizedStr,
+						FaPId: utils.NormalizedInt,
+						FaFlags: utils.NormalizedInt,
+						FaFFlags: utils.NormalizedInt,
+						FaResponse: utils.NormalizedStr,
 
-				// 		IWd: utils.NormalizedInt,
-				// 		ICookie: utils.NormalizedInt,
-				// 		IIno: utils.NormalizedInt,
-				// 		IInoDir: utils.NormalizedInt,
-				// 	}
-				// })(t, info, 0, events)
+						IWd: utils.NormalizedInt,
+						ICookie: utils.NormalizedInt,
+						IIno: utils.NormalizedInt,
+						IInoDir: utils.NormalizedInt,
+					}
+				})(t, info, 0, events)
 			},
 		},
 	}
@@ -165,29 +164,31 @@ func TestFsnotifyGadget(t *testing.T) {
 			runner := utilstest.NewRunnerWithTest(t, testCase.runnerConfig)
 
 			normalizeEvent := func(event *ExpectedFsnotifyEvent) {
-				fmt.Printf("- event normalization -\n")
-				// utils.NormalizeString(&event.Timestamp)
-				// utils.NormalizeInt(&event.TraceeMntnsId)
-				// utils.NormalizeInt(&event.TracerMntnsId)
+				utils.NormalizeString(&event.Timestamp)
 
-				// utils.NormalizeInt(&event.TraceeUId)
-				// utils.NormalizeInt(&event.TraceeGId)
-				// utils.NormalizeInt(&event.TracerUId)
-				// utils.NormalizeInt(&event.TracerGId)
+				utils.NormalizeProc(&event.TraceeProc)
+				utils.NormalizeProc(&event.TracerProc)
+				utils.NormalizeInt(&event.TraceeMntnsId)
+				utils.NormalizeInt(&event.TracerMntnsId)
 
-				// utils.NormalizeInt(&event.Prio)
-				// utils.NormalizeInt(&event.FaMask)
+				utils.NormalizeInt(&event.TraceeUId)
+				utils.NormalizeInt(&event.TraceeGId)
+				utils.NormalizeInt(&event.TracerUId)
+				utils.NormalizeInt(&event.TracerGId)
 
-				// utils.NormalizeString(&event.FaType)
-				// utils.NormalizeInt(&event.FaPId)
-				// utils.NormalizeInt(&event.FaFlags)
-				// utils.NormalizeInt(&event.FaFFlags)
-				// utils.NormalizeString(&event.FaResponse)
+				utils.NormalizeInt(&event.Prio)
+				utils.NormalizeInt(&event.FaMask)
 
-				// utils.NormalizeInt(&event.IWd)
-				// utils.NormalizeInt(&event.ICookie)
-				// utils.NormalizeInt(&event.IIno)
-				// utils.NormalizeInt(&event.IInoDir)
+				utils.NormalizeString(&event.FaType)
+				utils.NormalizeInt(&event.FaPId)
+				utils.NormalizeInt(&event.FaFlags)
+				utils.NormalizeInt(&event.FaFFlags)
+				utils.NormalizeString(&event.FaResponse)
+
+				utils.NormalizeInt(&event.IWd)
+				utils.NormalizeInt(&event.ICookie)
+				utils.NormalizeInt(&event.IIno)
+				utils.NormalizeInt(&event.IInoDir)
 			}
 			onGadgetRun := func(gadgetCtx operators.GadgetContext) error {
 				utilstest.RunWithRunner(t, runner, func() error {
@@ -228,19 +229,8 @@ func generateEvent() (string, error) {
 		return "", err
 	}
 
-	// touchCmd := exec.Command("touch", "/tmp/ABCDE")
-	// err = touchCmd.Run()
-	// if err != nil {
-	// 	return "", err
-	// }
-
-	file, err := os.Create("/tmp/ABCDE")
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	_, err = file.WriteString("herewego")
+	touchCmd := exec.Command("touch", "/tmp/ABCDE")
+	err = touchCmd.Run()
 	if err != nil {
 		return "", err
 	}
