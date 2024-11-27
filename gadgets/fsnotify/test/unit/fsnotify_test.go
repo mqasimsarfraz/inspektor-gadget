@@ -15,7 +15,8 @@
 package tests
 
 import (
-	"os/exec"
+	// "os/exec"
+	"os"
 	"testing"
 	"time"
 	"fmt"
