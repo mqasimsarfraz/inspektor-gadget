@@ -69,6 +69,8 @@ func (e ExpectedFsnotifyEvent) Print() {
 	fmt.Printf("Type: %s\n", e.Type)
 	fmt.Printf("TraceeCommand: %s\n", e.TraceeProc.Comm)
 	fmt.Printf("TracerCommand: %s\n", e.TracerProc.Comm)
+	fmt.Printf("TraceeCommand: %s\n", e.TraceeProc.Creds.Uid)
+	fmt.Printf("TracerCommand: %s\n", e.TracerProc.Creds.Gid)
 	fmt.Printf("TraceeMntnsId: %d\n", e.TraceeMntnsId)
 	fmt.Printf("TracerMntnsId: %d\n", e.TracerMntnsId)
 	fmt.Printf("TraceeUId: %d\n", e.TraceeUId)
@@ -106,18 +108,18 @@ func TestFsnotifyGadget(t *testing.T) {
 			generateEvent: generateEvent,
 			validateEvent: func(t *testing.T, info *utilstest.RunnerInfo, filename string, events []ExpectedFsnotifyEvent) {
 
-				// fmt.Printf("--------------------------------------------------\n")
-				// fmt.Printf("YOU ARE LOOKING FOR THIS SECTION\n")
-				// fmt.Printf("--------------------------------------------------\n")
-				// for _, event := range events {
-				// 	event.Print()
-				// 	fmt.Printf("--------------------------------------------------\n")
-				// }
+				fmt.Printf("--------------------------------------------------\n")
+				fmt.Printf("YOU ARE LOOKING FOR THIS SECTION\n")
+				fmt.Printf("--------------------------------------------------\n")
+				for _, event := range events {
+					event.Print()
+					fmt.Printf("--------------------------------------------------\n")
+				}
 
-				// fmt.Printf("runnerInfo proc command: %s\n", info.Proc.Comm)
-				// fmt.Printf("runnerInfo proc pid: %d\n", info.Proc.Pid)
-				// fmt.Printf("runnerInfo proc tid: %d\n", info.Proc.Tid)
-				// fmt.Printf("--------------------------------------------------\n")
+				fmt.Printf("runnerInfo proc command: %s\n", info.Proc.Comm)
+				fmt.Printf("runnerInfo proc pid: %d\n", info.Proc.Pid)
+				fmt.Printf("runnerInfo proc tid: %d\n", info.Proc.Tid)
+				fmt.Printf("--------------------------------------------------\n")
 
 				utilstest.ExpectAtLeastOneEvent(func(info *utilstest.RunnerInfo, pid int) *ExpectedFsnotifyEvent {
 					return &ExpectedFsnotifyEvent{
@@ -127,8 +129,8 @@ func TestFsnotifyGadget(t *testing.T) {
 						Name:  filename,
 
 						Timestamp: utils.NormalizedStr,
-						TraceeProc: utils.BuildProc("", 0, 0),
-						TracerProc: utils.BuildProc("", 0, 0),
+						TraceeProc: utils.BuildProc("foo", 1, 1),
+						TracerProc: utils.BuildProc("foo", 1, 1),
 
 					    TraceeMntnsId: utils.NormalizedInt,
 						TracerMntnsId: utils.NormalizedInt,
@@ -166,8 +168,8 @@ func TestFsnotifyGadget(t *testing.T) {
 			normalizeEvent := func(event *ExpectedFsnotifyEvent) {
 				utils.NormalizeString(&event.Timestamp)
 
-				utils.NormalizeProc(&event.TraceeProc)
-				utils.NormalizeProc(&event.TracerProc)
+				TotallyNormalizeProc(&event.TraceeProc)
+				TotallyNormalizeProc(&event.TracerProc)
 				utils.NormalizeInt(&event.TraceeMntnsId)
 				utils.NormalizeInt(&event.TracerMntnsId)
 
@@ -236,4 +238,15 @@ func generateEvent() (string, error) {
 	}
 
 	return "ABCDE", nil
+}
+
+func TotallyNormalizeProc(p *ebpftypes.Process) {
+	NormalizeString(&p.Comm)
+	NormalizeInt(&p.Pid)
+	NormalizeInt(&p.Tid)
+	NormalizeInt(&p.MntNsID)
+	NormalizeInt(&p.Creds.Uid)
+	NormalizeInt(&p.Creds.Gid)
+	NormalizeInt(&p.Parent.Pid)
+	NormalizeString(&p.Parent.Comm)
 }
