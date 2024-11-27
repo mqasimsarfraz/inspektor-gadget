@@ -112,6 +112,10 @@ func TestFsnotifyGadget(t *testing.T) {
 					fmt.Printf("--------------------------------------------------\n")
 				}
 
+				fmt.Printf("info proc command: %s", info.Proc.Comm)
+				fmt.Printf("info proc pid: %s", info.Proc.Pid)
+				fmt.Printf("info proc tid: %s", info.Proc.Tid)
+
 				utilstest.ExpectAtLeastOneEvent(func(info *utilstest.RunnerInfo, pid int) *ExpectedFsnotifyEvent {
 					return &ExpectedFsnotifyEvent{
 						Type:  "inotify",
@@ -157,28 +161,29 @@ func TestFsnotifyGadget(t *testing.T) {
 			runner := utilstest.NewRunnerWithTest(t, testCase.runnerConfig)
 
 			normalizeEvent := func(event *ExpectedFsnotifyEvent) {
-				utils.NormalizeString(&event.Timestamp)
-				utils.NormalizeInt(&event.TraceeMntnsId)
-				utils.NormalizeInt(&event.TracerMntnsId)
+				fmt.Printf("- event normalization -\n")
+				// utils.NormalizeString(&event.Timestamp)
+				// utils.NormalizeInt(&event.TraceeMntnsId)
+				// utils.NormalizeInt(&event.TracerMntnsId)
 
-				utils.NormalizeInt(&event.TraceeUId)
-				utils.NormalizeInt(&event.TraceeGId)
-				utils.NormalizeInt(&event.TracerUId)
-				utils.NormalizeInt(&event.TracerGId)
+				// utils.NormalizeInt(&event.TraceeUId)
+				// utils.NormalizeInt(&event.TraceeGId)
+				// utils.NormalizeInt(&event.TracerUId)
+				// utils.NormalizeInt(&event.TracerGId)
 
-				utils.NormalizeInt(&event.Prio)
-				utils.NormalizeInt(&event.FaMask)
+				// utils.NormalizeInt(&event.Prio)
+				// utils.NormalizeInt(&event.FaMask)
 
-				utils.NormalizeString(&event.FaType)
-				utils.NormalizeInt(&event.FaPId)
-				utils.NormalizeInt(&event.FaFlags)
-				utils.NormalizeInt(&event.FaFFlags)
-				utils.NormalizeString(&event.FaResponse)
+				// utils.NormalizeString(&event.FaType)
+				// utils.NormalizeInt(&event.FaPId)
+				// utils.NormalizeInt(&event.FaFlags)
+				// utils.NormalizeInt(&event.FaFFlags)
+				// utils.NormalizeString(&event.FaResponse)
 
-				utils.NormalizeInt(&event.IWd)
-				utils.NormalizeInt(&event.ICookie)
-				utils.NormalizeInt(&event.IIno)
-				utils.NormalizeInt(&event.IInoDir)
+				// utils.NormalizeInt(&event.IWd)
+				// utils.NormalizeInt(&event.ICookie)
+				// utils.NormalizeInt(&event.IIno)
+				// utils.NormalizeInt(&event.IInoDir)
 			}
 			onGadgetRun := func(gadgetCtx operators.GadgetContext) error {
 				utilstest.RunWithRunner(t, runner, func() error {
