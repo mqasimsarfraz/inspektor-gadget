@@ -72,6 +72,7 @@ require (
 	github.com/containerd/errdefs v1.0.0
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/gopacket/gopacket v1.2.0
+	github.com/miekg/dns v1.1.58
 	github.com/sigstore/sigstore v1.8.10
 	github.com/spf13/pflag v1.0.5
 	github.com/tetratelabs/wazero v1.8.1

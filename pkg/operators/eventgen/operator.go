@@ -5,11 +5,12 @@ import (
 	"strconv"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/eventgenerator"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-service/api"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
-	log "github.com/sirupsen/logrus"
 )
 
 type eventGenOperator struct{}
@@ -51,7 +52,7 @@ func (e eventGenOperator) InstantiateDataOperator(gadgetCtx operators.GadgetCont
 	// Determine which approach to use
 	useNamespaceApproach := hasNamespace && namespace != ""
 
-    // disable if on the client side and namespace approach is used
+	// disable if on the client side and namespace approach is used
 	if !gadgetCtx.IsRemoteCall() && useNamespaceApproach || gadgetCtx.IsRemoteCall() && !useNamespaceApproach {
 		log.Debugf("EventGen disabled for since approach is not supported")
 		return &eventGenOperatorInstance{enable: false}, nil
@@ -149,7 +150,7 @@ func (e *eventGenOperatorInstance) Start(gadgetCtx operators.GadgetContext) erro
 			return fmt.Errorf("unsupported event type for namespace approach: %s", e.eventType)
 		}
 	} else {
-        e.generator, err = eventgenerator.NewPodGenerator(e.eventType, gadgetCtx.Logger())
+		e.generator, err = eventgenerator.NewPodGenerator(e.eventType, gadgetCtx.Logger())
 	}
 
 	if err != nil {
