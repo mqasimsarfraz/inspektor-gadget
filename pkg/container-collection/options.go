@@ -722,7 +722,7 @@ func WithInitialContainerOCIConfigEnrichment() ContainerCollectionOption {
 	return func(cc *ContainerCollection) error {
 		for _, container := range cc.initialContainers {
 			ppid := 0
-			if statusFile, err := os.Open(filepath.Join("/proc", fmt.Sprintf("%d", container.Pid), "status")); err == nil {
+			if statusFile, err := os.Open(filepath.Join("/proc", fmt.Sprintf("%d", container.Runtime.ContainerPID), "status")); err == nil {
 				defer statusFile.Close()
 				reader := bufio.NewReader(statusFile)
 				for {
