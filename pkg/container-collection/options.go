@@ -15,15 +15,21 @@
 package containercollection
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
+	"strconv"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	ocispec "github.com/opencontainers/runtime-spec/specs-go"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 	corev1 "k8s.io/api/core/v1"
@@ -711,6 +717,48 @@ func isEnrichedWithOCIConfigInfo(container *Container) bool {
 		container.SandboxId != ""
 }
 
+// WithInitialContainerOCIConfigEnrichment enables an enricher to add the OCI config of the initial containers
+func WithInitialContainerOCIConfigEnrichment() ContainerCollectionOption {
+	return func(cc *ContainerCollection) error {
+		for _, container := range cc.initialContainers {
+			ppid := 0
+			if statusFile, err := os.Open(filepath.Join("/proc", fmt.Sprintf("%d", container.Pid), "status")); err == nil {
+				defer statusFile.Close()
+				reader := bufio.NewReader(statusFile)
+				for {
+					line, err := reader.ReadString('\n')
+					if err != nil {
+						break
+					}
+					if strings.HasPrefix(line, "PPid:\t") {
+						ppidStr := strings.TrimPrefix(line, "PPid:\t")
+						ppidStr = strings.TrimSuffix(ppidStr, "\n")
+						ppid, err = strconv.Atoi(ppidStr)
+						if err != nil {
+							log.Warnf("cannot parse PPid from /proc/PID/status: %s", err)
+						}
+						break
+					}
+				}
+			} else {
+				log.Warnf("cannot open /proc/PID/status: %s", err)
+			}
+			config, err := os.ReadFile(fmt.Sprintf("/proc/%d/cwd/config.json", ppid))
+			if err != nil {
+				log.Warnf("cannot read config.json from /proc/PID/cwd: %s", err)
+				continue
+			}
+			ociSpec := &ocispec.Spec{}
+			err = json.Unmarshal(config, ociSpec)
+			if err != nil {
+				log.Warnf("cannot unmarshal config.json from /proc/PID/cwd: %s", err)
+				continue
+			}
+			container.OciConfig = ociSpec
+		}
+		return nil
+	}
+}
 // WithOCIConfigEnrichment enriches container using provided OCI config
 func WithOCIConfigEnrichment() ContainerCollectionOption {
 	return func(cc *ContainerCollection) error {
