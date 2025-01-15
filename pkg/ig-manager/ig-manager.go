@@ -101,6 +101,7 @@ func NewManager(runtimes []*containerutilsTypes.RuntimeConfig, additionalOpts []
 		containercollection.WithContainerFanotifyEbpf(),
 		containercollection.WithTracerCollection(l.tracerCollection),
 		containercollection.WithProcEnrichment(),
+		containercollection.WithInitialContainerOCIConfigEnrichment(),
 	}
 	opts = append(opts, additionalOpts...)
 
