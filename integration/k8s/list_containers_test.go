@@ -66,7 +66,6 @@ func newListContainerTestStep(
 			}
 
 			normalize := func(c *containercollection.Container) {
-				c.OciConfig = nil
 				c.Bundle = ""
 				c.Mntns = 0
 				c.Netns = 0
@@ -85,6 +84,20 @@ func newListContainerTestStep(
 				// Docker can provide different values for ContainerImageName. See `getContainerImageNamefromImage`
 				if isDockerRuntime {
 					c.Runtime.ContainerImageName = ""
+				}
+				// Add a check to ensure OciConfig is populated reasonably
+				if c.OciConfig == nil {
+					t.Errorf("Expected OciConfig to be populated, but it is nil")
+				}
+
+				// Optionally, checking some basic fields in OciConfig to ensure it's not empty
+				if c.OciConfig != nil {
+					if c.OciConfig.Process == nil {
+						t.Errorf("Expected OciConfig to have Process information, but it is nil")
+					}
+					if c.OciConfig.Root == nil || c.OciConfig.Root.Path == "" {
+						t.Errorf("Expected OciConfig to have a valid Root Path, but it is missing or empty")
+					}
 				}
 			}
 
