@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"testing"
 
+	ocispec "github.com/opencontainers/runtime-spec/specs-go"
+
 	. "github.com/inspektor-gadget/inspektor-gadget/integration"
 	containercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/container-collection"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/testing/match"
@@ -58,6 +60,9 @@ func newListContainerTestStep(
 						ContainerImageName: "docker.io/library/busybox:latest",
 					},
 				},
+				OciConfig: &ocispec.Spec{
+					Hostname: pod,
+				},
 			}
 
 			// Docker can provide different values for ContainerImageName. See `getContainerImageNamefromImage`
@@ -85,19 +90,10 @@ func newListContainerTestStep(
 				if isDockerRuntime {
 					c.Runtime.ContainerImageName = ""
 				}
-				// Add a check to ensure OciConfig is populated reasonably
-				if c.OciConfig == nil {
-					t.Errorf("Expected OciConfig to be populated, but it is nil")
-				}
 
-				// Optionally, checking some basic fields in OciConfig to ensure it's not empty
-				if c.OciConfig != nil {
-					if c.OciConfig.Process == nil {
-						t.Errorf("Expected OciConfig to have Process information, but it is nil")
-					}
-					if c.OciConfig.Root == nil || c.OciConfig.Root.Path == "" {
-						t.Errorf("Expected OciConfig to have a valid Root Path, but it is missing or empty")
-					}
+				if c.OciConfig != nil && c.OciConfig.Hostname != "" {
+					oc := ocispec.Spec{Hostname: c.OciConfig.Hostname}
+					c.OciConfig = &oc
 				}
 			}
 
