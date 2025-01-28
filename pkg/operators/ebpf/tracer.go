@@ -206,6 +206,7 @@ func (t *Tracer) receiveEventsFromPerfReader(gadgetCtx operators.GadgetContext) 
 			gadgetCtx.Logger().Warnf("error emitting data: %v", err)
 		}
 		if rec.LostSamples > 0 {
+			gadgetCtx.Logger().Warnf("perf event ring buffer full, dropped %d samples", rec.LostSamples)
 			t.ds.ReportLostData(rec.LostSamples)
 		}
 	}
