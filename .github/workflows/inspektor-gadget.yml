@@ -1707,6 +1707,7 @@ jobs:
         GADGET_REPOSITORY: ${{ steps.set-repo-determine-image-tag.outputs.gadget-repository }}
         GADGET_TAG: ${{ steps.set-repo-determine-image-tag.outputs.gadget-tag }}
         VERIFY_IMAGE: ${{ needs.check-secrets.outputs.cosign }}
+        DNSTESTER_IMAGE: ${{ needs.build-helper-images.outputs.dnstester_image }}
       run: |
           set -o pipefail
           make \
@@ -1782,6 +1783,7 @@ jobs:
         VERIFY_GADGETS: ${{ needs.check-secrets.outputs.cosign }}
         CONTAINER_REPO: ${{ steps.set-repo-determine-image-tag.outputs.container-repo }}
         IMAGE_TAG: ${{ steps.set-repo-determine-image-tag.outputs.image-tag }}
+        DNSTESTER_IMAGE: ${{ needs.build-helper-images.outputs.dnstester_image }}
       run: |
         set -o pipefail
         tar zxvf /home/runner/work/inspektor-gadget/inspektor-gadget/kubectl-gadget-linux-amd64.tar.gz

@@ -21,11 +21,18 @@ import (
 	"github.com/miekg/dns"
 )
 
-var uncompress = flag.Bool("uncompress", false, "Uncompress DNS messages")
+var (
+	tcp        = flag.Bool("tcp", false, "Use TCP")
+	uncompress = flag.Bool("uncompress", false, "Uncompress DNS messages")
+)
 
 func main() {
 	flag.Parse()
 	log.Printf("Starting dns server with uncompress=%v\n", *uncompress)
+
+	if *tcp {
+		log.Println("Listening on tcp")
+	}
 
 	dns.Handle(".", dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
@@ -55,7 +62,11 @@ func main() {
 
 	}))
 
-	server := &dns.Server{Addr: ":53", Net: "udp"}
+	protocol := "udp"
+	if *tcp {
+		protocol = "tcp"
+	}
+	server := &dns.Server{Addr: ":53", Net: protocol}
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Failed to start dns server %s\n", err)
 	}

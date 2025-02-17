@@ -269,7 +269,27 @@ int ig_trace_dns(struct __sk_buff *skb)
 		dport = load_half(skb, l4_off + offsetof(struct udphdr, dest));
 		dns_off = l4_off + sizeof(struct udphdr);
 		break;
-	// TODO: support TCP
+	case IPPROTO_TCP:
+		// This is best effort, since we don't reassemble segments.
+		struct tcphdr tcph;
+		if (bpf_skb_load_bytes(skb, l4_off, &tcph, sizeof tcph))
+			return 0;
+
+		sport = bpf_htons(tcph.source);
+		dport = bpf_htons(tcph.dest);
+
+		// The data offset field in the header is specified in 32-bit words. We
+		// have to multiply this value by 4 to get the TCP header length in bytes.
+		__u8 tcp_header_len = tcph.doff * 4;
+
+		// DNS is after the TCP header and the 2 bytes of the length of the DNS packet
+		dns_off = l4_off + tcp_header_len + 2;
+
+		// Skip the packet if the DNS packet is not in the payload of the TCP packet
+		// to avoid parsing control segments.
+		if (dns_off >= skb->len)
+			return 0;
+		break;
 	default:
 		return 0;
 	}
