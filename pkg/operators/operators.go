@@ -106,6 +106,11 @@ type ImageOperator interface {
 	) (ImageOperatorInstance, error)
 }
 
+type ImageOperatorCloser interface {
+	// Close allows the operator to clean up stuff prior to exiting
+	Close() error
+}
+
 type ImageOperatorInstance interface {
 	Name() string
 	Prepare(gadgetCtx GadgetContext) error

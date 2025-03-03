@@ -451,6 +451,11 @@ func (o *OciHandlerInstance) Stop(gadgetCtx operators.GadgetContext) error {
 		if err != nil {
 			o.gadgetCtx.Logger().Errorf("stopping operator %q: %v", opInst.Name(), err)
 		}
+		closer, ok := opInst.(operators.ImageOperatorCloser)
+		if ok {
+			closer.Close()
+		}
+
 	}
 
 	for _, opInst := range o.imageOperatorInstances {
