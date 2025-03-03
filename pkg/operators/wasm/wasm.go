@@ -50,7 +50,9 @@ const (
 	dataArrayHandleFlag = uint32(1 << 31)
 )
 
-type wasmOperator struct{}
+type wasmOperator struct {
+	cache *compilationCache
+}
 
 func (w *wasmOperator) Name() string {
 	return "wasm"
@@ -76,7 +78,10 @@ func (w *wasmOperator) InstantiateImageOperator(
 		createdMap:  map[uint32]struct{}{},
 	}
 
-	if err := instance.init(gadgetCtx, target, desc); err != nil {
+	// Refresh the cache to avoid using stale data
+	w.cache.refreshCache()
+
+	if err := instance.init(gadgetCtx, target, desc, w.cache); err != nil {
 		instance.close(gadgetCtx)
 		return nil, fmt.Errorf("initializing wasm: %w", err)
 	}
@@ -210,11 +215,16 @@ func (i *wasmOperatorInstance) init(
 	gadgetCtx operators.GadgetContext,
 	target oras.ReadOnlyTarget,
 	desc ocispec.Descriptor,
+	cc *compilationCache,
 ) error {
+	cc.refreshMu.Lock()
+	defer cc.refreshMu.Unlock()
+
 	ctx := gadgetCtx.Context()
 	rtConfig := wazero.NewRuntimeConfig().
 		WithCloseOnContextDone(true).
-		WithMemoryLimitPages(256) // 16MB (64KB per page)
+		WithMemoryLimitPages(256). // 16MB (64KB per page)
+		WithCompilationCache(cc.cache)
 	i.rt = wazero.NewRuntimeWithConfig(ctx, rtConfig)
 
 	env := i.rt.NewHostModuleBuilder("env")
@@ -344,5 +354,5 @@ func (i *wasmOperatorInstance) close(gadgetCtx operators.GadgetContext) error {
 }
 
 func init() {
-	operators.RegisterOperatorForMediaType(wasmObjectMediaType, &wasmOperator{})
+	operators.RegisterOperatorForMediaType(wasmObjectMediaType, &wasmOperator{cache: newCompilationCache()})
 }
