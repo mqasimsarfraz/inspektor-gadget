@@ -35,6 +35,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/moby/moby/pkg/jsonmessage"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
@@ -303,6 +304,15 @@ func runBuild(cmd *cobra.Command, opts *cmdOpts) error {
 	desc, err := oci.BuildGadgetImage(context.TODO(), buildOpts, opts.image)
 	if err != nil {
 		return err
+	}
+
+	manifest, err := oci.GetManifestForHost(context.TODO(), nil, opts.image)
+	if err != nil {
+		return err
+	}
+
+	if len(manifest.Layers) == 0 && (manifest.Config.Digest == ocispec.DescriptorEmptyJSON.Digest) {
+		return fmt.Errorf("empty gadget built")
 	}
 
 	cmd.Printf("Successfully built %s\n", desc.String())
