@@ -211,6 +211,27 @@ func runBuild(cmd *cobra.Command, opts *cmdOpts) error {
 		conf.EBPFSource = ""
 	}
 
+	var hasEBPFSource, hasMetadata, hasWasm bool
+	if conf.EBPFSource != "" {
+		if _, err := os.Stat(conf.EBPFSource); err == nil {
+			hasEBPFSource = true
+		}
+	}
+	if conf.Metadata != "" {
+		if _, err := os.Stat(conf.Metadata); err == nil {
+			hasMetadata = true
+		}
+	}
+	if conf.Wasm != "" {
+		if _, err := os.Stat(conf.Wasm); err == nil {
+			hasWasm = true
+		}
+	}
+
+	if !hasEBPFSource && !hasMetadata && !hasWasm {
+		return fmt.Errorf("ateast one of ebpf source (program.bpf.c), metadata (gadget.yaml) or wasm module is required")
+	}
+
 	// copy helper files
 	files, err := helpersFS.ReadDir("helpers")
 	if err != nil {
