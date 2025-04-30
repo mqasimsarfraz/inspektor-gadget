@@ -30,6 +30,8 @@ type param struct {
 	fromEbpf bool
 	// Only valid for string parameters
 	strLen int
+	// Only valid for array parameters
+	arrayLen int
 }
 
 func getTypeHint(typ btf.Type) params.TypeHint {
@@ -81,6 +83,9 @@ func getTypeHint(typ btf.Type) params.TypeHint {
 		arrayType := btfhelpers.ResolveType(typedMember.Type)
 		if arrayType.TypeName() == "char" {
 			return params.TypeString
+		}
+		if arrayType.TypeName() == "unsigned short" {
+			return params.TypeArrayUint16
 		}
 	}
 
@@ -162,6 +167,12 @@ func (i *ebpfInstance) populateParam(t btf.Type, varName string) error {
 		typ := btfhelpers.ResolveType(btfVar.Type)
 		if arrayType, ok := typ.(*btf.Array); ok {
 			newParam.strLen = int(arrayType.Nelems)
+		}
+	}
+	if th == params.TypeArrayUint16 {
+		typ := btfhelpers.ResolveType(btfVar.Type)
+		if arrayType, ok := typ.(*btf.Array); ok {
+			newParam.arrayLen = int(arrayType.Nelems)
 		}
 	}
 

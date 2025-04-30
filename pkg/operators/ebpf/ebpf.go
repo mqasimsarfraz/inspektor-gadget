@@ -614,6 +614,15 @@ func (i *ebpfInstance) Start(gadgetCtx operators.GadgetContext) error {
 			}
 			copy(bytes[:], strBytes)
 			paramVal = bytes
+		case api.TypeArrayUint16:
+			i.logger.Debugf("handling array param: %q", name)
+			array := make([]uint16, p.arrayLen)
+			arrayBytes := paramMap[name].AsUint16Slice()
+			if len(arrayBytes) > p.arrayLen {
+				return fmt.Errorf("array param %q too long: %d > %d", name, len(arrayBytes), p.arrayLen)
+			}
+			copy(array[:], arrayBytes)
+			paramVal = array
 		}
 
 		i.logger.Debugf("setting param value %q = %v", name, paramVal)

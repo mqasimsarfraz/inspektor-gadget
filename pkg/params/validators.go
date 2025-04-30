@@ -44,6 +44,7 @@ const (
 	TypeDuration    TypeHint = "duration"
 	TypeIP          TypeHint = "ip"
 	TypeStringSlice TypeHint = "[]string"
+	TypeArrayUint16 TypeHint = "[]uint16"
 )
 
 var typeHintValidators = map[TypeHint]ParamValidator{

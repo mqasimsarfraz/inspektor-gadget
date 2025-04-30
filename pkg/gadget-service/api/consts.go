@@ -74,6 +74,7 @@ const (
 	TypeDuration    = "duration"
 	TypeIP          = "ip"
 	TypeStringSlice = "[]string"
+	TypeArrayUint16 = "[]uint16"
 )
 
 const (
