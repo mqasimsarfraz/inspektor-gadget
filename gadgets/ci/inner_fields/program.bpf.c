@@ -4,6 +4,8 @@
 #include <gadget/macros.h>
 #include <gadget/types.h>
 
+GADGET_CATEGORY_OBSERVER();
+
 enum myenum {
 	ONE = 1,
 	TWO = 2,
