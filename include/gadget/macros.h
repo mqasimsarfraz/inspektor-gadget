@@ -67,4 +67,16 @@
 #define GADGET_MAPITER(name, mapname) \
 	const void *gadget_mapiter_##name##___##mapname __attribute__((unused));
 
+// GADGET_CATEGORY_OBSERVER is used to define observer category for a gadget.
+#define GADGET_CATEGORY_OBSERVER() \
+    const void *gadget_category_observer __attribute__((unused));
+
+// GADGET_CATEGORY_GENERATOR is used to define generator category for a gadget.
+#define GADGET_CATEGORY_GENERATOR() \
+    const void *gadget_category_generator __attribute__((unused));
+
+// GADGET_CATEGORY_DROPPER is used to define dropper category for a gadget.
+#define GADGET_CATEGORY_DROPPER() \
+    const void *gadget_category_dropper __attribute__((unused));
+
 #endif /* __MACROS_H */

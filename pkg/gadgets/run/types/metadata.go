@@ -22,6 +22,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 
 	metadatav1 "github.com/inspektor-gadget/inspektor-gadget/pkg/metadata/v1"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
@@ -40,13 +41,20 @@ const (
 
 	// Prefix used to mark eBPF params
 	paramPrefix = "gadget_param_"
+
+	// Prefix used to mark gadget categories
+	gadgetObserverPrefix = "gadget_category_"
 )
 
 func Validate(m *metadatav1.GadgetMetadata, spec *ebpf.CollectionSpec) error {
 	var errs []error
 
-	if m.Name == "" {
-		errs = append(errs, errors.New("gadget name is required"))
+	if m.Category == "" {
+		errs = append(errs, errors.New("gadget category is required"))
+	}
+
+	if !slices.Contains(metadatav1.CategoryList, m.Category) {
+		errs = append(errs, fmt.Errorf("gadget category %q is not valid, expected one of %v", m.Category, metadatav1.CategoryList))
 	}
 
 	errs = append(errs, validateEbpfParams(m, spec))
@@ -98,6 +106,17 @@ func Populate(m *metadatav1.GadgetMetadata, spec *ebpf.CollectionSpec) error {
 		m.DataSources = make(map[string]*metadatav1.DataSource)
 	}
 
+	if m.Category == "" {
+		err := populateGadgetCategory(m, spec)
+		if err != nil {
+			return fmt.Errorf("populating metadata category: %w", err)
+		}
+	}
+
+	if err := populateGadgetCategory(m, spec); err != nil {
+		return fmt.Errorf("handling gadget category: %w", err)
+	}
+
 	if err := populateTracers(m, spec); err != nil {
 		return fmt.Errorf("handling tracers: %w", err)
 	}
@@ -113,6 +132,33 @@ func Populate(m *metadatav1.GadgetMetadata, spec *ebpf.CollectionSpec) error {
 	if err := populateEbpfParams(m, spec); err != nil {
 		return fmt.Errorf("handling params: %w", err)
 	}
+
+	return nil
+}
+
+func PopulateMandatory(m *metadatav1.GadgetMetadata, spec *ebpf.CollectionSpec) error {
+	err := populateGadgetCategory(m, spec)
+	if err != nil {
+		return fmt.Errorf("populating metadata category: %w", err)
+	}
+	return nil
+}
+
+func populateGadgetCategory(m *metadatav1.GadgetMetadata, spec *ebpf.CollectionSpec) error {
+	gadgetCategory, err := GetGadgetIdentByPrefix(spec, gadgetObserverPrefix)
+	if err != nil {
+		return fmt.Errorf("getting gadget category: %w", err)
+	}
+
+	if len(gadgetCategory) == 0 {
+		return fmt.Errorf("gadget category not found")
+	}
+
+	if len(gadgetCategory) != 1 {
+		return fmt.Errorf("multiple gadget categories found: %v", gadgetCategory)
+	}
+
+	m.Category = metadatav1.Category(gadgetCategory[0])
 
 	return nil
 }

@@ -17,7 +17,6 @@ package oci
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -62,29 +61,6 @@ func getAnySpec(opts *BuildGadgetImageOpts) (*ebpf.CollectionSpec, error) {
 	}
 
 	return loadSpec(progContent)
-}
-
-func validateMetadataFile(ctx context.Context, opts *BuildGadgetImageOpts) error {
-	metadataFile, err := os.Open(opts.MetadataPath)
-	if err != nil {
-		return fmt.Errorf("opening metadata file: %w", err)
-	}
-	defer metadataFile.Close()
-
-	metadata := &metadatav1.GadgetMetadata{}
-	if err := yaml.NewDecoder(metadataFile).Decode(metadata); err != nil {
-		return fmt.Errorf("decoding metadata file: %w", err)
-	}
-
-	spec, err := getAnySpec(opts)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return fmt.Errorf("loading spec: %w", err)
-	}
-
-	return types.Validate(metadata, spec)
 }
 
 func createOrUpdateMetadataFile(ctx context.Context, opts *BuildGadgetImageOpts) error {
