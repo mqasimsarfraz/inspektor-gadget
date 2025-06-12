@@ -17,7 +17,6 @@ data:
       crio-socketpath: {{ .Values.config.crioSocketPath }}
       docker-socketpath: {{ .Values.config.dockerSocketPath }}
       podman-socketpath: {{ .Values.config.podmanSocketPath }}
-      gadget-namespace: {{ .Values.config.gadgetNamespace }}
       operator:
         oci:
           verify-image: {{ .Values.config.verifyGadgets }}
