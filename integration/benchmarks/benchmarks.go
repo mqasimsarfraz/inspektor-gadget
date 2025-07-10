@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,15 +39,17 @@ func (c *linesCounter) Write(p []byte) (n int, err error) {
 }
 
 type stat struct {
-	cpu float64
-	mem float64
+	cpu  float64
+	mem  float64
+	lost uint64
 }
 
 type statResult struct {
-	cpuMean float64
-	cpuCI   float64
-	memMean float64
-	memCI   float64
+	cpuMean  float64
+	cpuCI    float64
+	memMean  float64
+	memCI    float64
+	lostMean float64
 }
 
 type GadgetBenchTest struct {
@@ -71,8 +74,9 @@ func testGadgetSingle(t *testing.T, c *GadgetBenchTest, conf any, usetracer bool
 	tName := fmt.Sprintf("test-%s", c.Gadget)
 
 	// TODO: make all of this configurable
-	const timeoutParam = "--timeout=60"
-	const sleepTimeout = 60 * time.Second
+	const runDuration = 60
+	timeoutParam := fmt.Sprintf("--timeout=%d", runDuration)
+	const sleepTimeout = runDuration * time.Second
 	const warmUpTimeout = 20 * time.Second
 	const cpuAndMemoryInitialDelay = 15 * time.Second
 
@@ -142,12 +146,30 @@ func testGadgetSingle(t *testing.T, c *GadgetBenchTest, conf any, usetracer bool
 
 	runnerOpts = append(runnerOpts, igrunner.WithFlags(c.GadgetParams...))
 
+	lost := uint64(0)
+
 	var gadgetCmd igtesting.TestStep
 	var lWriter *linesCounter
 	if usetracer {
-		// Check the gadget didn't drop any sample.
+		// Count dropped events.
 		runnerOpts = append(runnerOpts, igrunner.WithValidateStderrOutput(func(t *testing.T, output string) {
-			require.NotContains(t, output, "lost", "Gadget output should not contain 'dropped' messages")
+			// Parse output to count lost samples
+			lines := strings.Split(output, "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if strings.Contains(line, "lost") && strings.Contains(line, "samples") {
+					// Extract number from "lost <number> samples"
+					parts := strings.Fields(line)
+					for i, part := range parts {
+						if part == "lost" && i+1 < len(parts) {
+							if num, err := strconv.ParseUint(parts[i+1], 10, 64); err == nil {
+								lost += num
+							}
+							break
+						}
+					}
+				}
+			}
 		}))
 
 		// check that the gadget captured data
@@ -184,14 +206,16 @@ func testGadgetSingle(t *testing.T, c *GadgetBenchTest, conf any, usetracer bool
 	}
 
 	return stat{
-		cpu: cpu.Avg(),
-		mem: mem.Avg(),
+		cpu:  cpu.Avg(),
+		mem:  mem.Avg(),
+		lost: lost / runDuration, // Convert lost events to per second
 	}
 }
 
 func testGadgetMultiple(t *testing.T, c *GadgetBenchTest, comb any, usetracer bool, nRuns int) statResult {
 	cpuValues := make([]float64, 0, nRuns)
 	memValues := make([]float64, 0, nRuns)
+	lostValues := make([]uint64, 0, nRuns)
 
 	for i := 0; i < nRuns; i++ {
 		t.Run(fmt.Sprintf("comb=%v_usetracer=%t_run=%d", comb, usetracer, i+1), func(t *testing.T) {
@@ -199,6 +223,7 @@ func testGadgetMultiple(t *testing.T, c *GadgetBenchTest, comb any, usetracer bo
 			result := testGadgetSingle(t, c, comb, usetracer)
 			cpuValues = append(cpuValues, result.cpu)
 			memValues = append(memValues, result.mem)
+			lostValues = append(lostValues, result.lost)
 		})
 	}
 
@@ -208,11 +233,15 @@ func testGadgetMultiple(t *testing.T, c *GadgetBenchTest, comb any, usetracer bo
 	memMean, memCI := CalculateStats(memValues)
 	fmt.Printf("Memory Mean: %.2f, Memory CI: %.2f\n", memMean, memCI)
 
+	lostMean, _ := CalculateStats(lostValues)
+	fmt.Printf("Lost Mean: %.2f\n", lostMean)
+
 	return statResult{
-		cpuMean: cpuMean,
-		cpuCI:   cpuCI,
-		memMean: memMean,
-		memCI:   memCI,
+		cpuMean:  cpuMean,
+		cpuCI:    cpuCI,
+		memMean:  memMean,
+		memCI:    memCI,
+		lostMean: lostMean,
 	}
 }
 
@@ -237,7 +266,7 @@ func RunGadgetBenchmark(t *testing.T, c *GadgetBenchTest) {
 
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
-	writer.Write([]string{"Name", "rps", "%cpu", "mem(MB)", "cpu_ci", "mem_ci", "runs"})
+	writer.Write([]string{"Name", "rps", "%cpu", "mem(MB)", "cpu_ci", "mem_ci", "runs", "lost"})
 
 	for _, comb := range c.TestConfs {
 		for _, useTracer := range []bool{false, true} {
@@ -259,6 +288,7 @@ func RunGadgetBenchmark(t *testing.T, c *GadgetBenchTest) {
 				strconv.FormatFloat(result.cpuCI, 'f', 2, 64),
 				strconv.FormatFloat(result.memCI, 'f', 2, 64),
 				strconv.Itoa(nRums),
+				strconv.FormatFloat(result.lostMean, 'f', 2, 64),
 			})
 
 			// Flush after each test to ensure data is written
@@ -267,8 +297,15 @@ func RunGadgetBenchmark(t *testing.T, c *GadgetBenchTest) {
 	}
 }
 
+// Numeric is a constraint for numeric types
+type Numeric interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
+		~float32 | ~float64
+}
+
 // calculateStats calculates mean and 95% confidence interval for a slice of values
-func CalculateStats(values []float64) (mean, ci float64) {
+func CalculateStats[T Numeric](values []T) (mean, ci float64) {
 	if len(values) == 0 {
 		return 0, 0
 	}
@@ -276,7 +313,7 @@ func CalculateStats(values []float64) (mean, ci float64) {
 	// Calculate mean
 	sum := 0.0
 	for _, v := range values {
-		sum += v
+		sum += float64(v)
 	}
 	mean = sum / float64(len(values))
 
@@ -288,7 +325,7 @@ func CalculateStats(values []float64) (mean, ci float64) {
 	// Calculate standard deviation
 	sumSquares := 0.0
 	for _, v := range values {
-		diff := v - mean
+		diff := float64(v) - mean
 		sumSquares += diff * diff
 	}
 	variance := sumSquares / float64(len(values)-1)

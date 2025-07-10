@@ -269,7 +269,6 @@ with PdfPages(args.output) as pdf:
             fig, df = create_plots_for_file(filepath)
             if fig is not None:
                 pdf.savefig(fig, bbox_inches='tight', pad_inches=0.5)
-                print_statistics(filepath, df)
                 plt.close(fig)  # Close figure to free memory
             else:
                 print(f"Skipping {filepath} due to data issues")
