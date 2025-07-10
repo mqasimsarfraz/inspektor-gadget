@@ -40,6 +40,7 @@ type TestConfig struct {
 	Server          *ServerConfig   `yaml:"server,omitempty"`
 	Generator       GeneratorConfig `yaml:"generator"`
 	EventsPerSecond []int           `yaml:"eventsPerSecond"`
+	GadgetParams    []string        `yaml:"gadgetParams,omitempty"`
 }
 
 type ServerConfig struct {
@@ -117,6 +118,7 @@ func TestBenchmarks(t *testing.T) {
 							cmd = strings.ReplaceAll(cmd, "{eventsPerSecond}", fmt.Sprintf("%d", a))
 							return cmd
 						},
+						GadgetParams: testConfig.GadgetParams,
 					}
 
 					if testConfig.Server != nil {
