@@ -61,12 +61,13 @@ def create_performance_table(ax, baseline_data, ig_data):
     ig_mem = ig_data['mem(MB)'].values
     baseline_mem_ci = baseline_data['mem_ci'].values
     ig_mem_ci = ig_data['mem_ci'].values
+    ig_lost = ig_data['lost'].values
 
     # Prepare table data
     table_data = []
 
     # Header row
-    table_data.append(['RPS', 'CPU Usage (avg)', 'Confidence Interval', 'Overhead (%)', 'Mem Usage (avg)', 'Confidence Interval', 'Overhead (MB)'])
+    table_data.append(['RPS', 'CPU Usage (avg)', 'Confidence Interval', 'Overhead (%)', 'Mem Usage (avg)', 'Confidence Interval', 'Overhead (MB)', 'Lost Events'])
 
     # Data rows for each RPS configuration
     for i, rps in enumerate(rps_values):
@@ -80,7 +81,8 @@ def create_performance_table(ax, baseline_data, ig_data):
             f'{cpu_overhead_pct:.1f}%',
             f'{ig_mem[i]:.0f}MB',
             f'±{ig_mem_ci[i]:.0f}MB',
-            f'{mem_overhead_mb:.0f}MB'
+            f'{mem_overhead_mb:.0f}MB',
+            f'{int(ig_lost[i])}'
         ])
 
     # Average row
@@ -90,6 +92,7 @@ def create_performance_table(ax, baseline_data, ig_data):
     avg_ig_mem = np.mean(ig_mem)
     avg_ig_mem_ci = np.mean(ig_mem_ci)
     avg_mem_overhead_mb = np.mean(ig_mem - baseline_mem)
+    avg_lost = np.mean(ig_lost)
 
     table_data.append([
         'Average',
@@ -98,7 +101,8 @@ def create_performance_table(ax, baseline_data, ig_data):
         f'{avg_cpu_overhead_pct:.1f}%',
         f'{avg_ig_mem:.0f}MB',
         f'±{avg_ig_mem_ci:.0f}MB',
-        f'{avg_mem_overhead_mb:.0f}MB'
+        f'{avg_mem_overhead_mb:.0f}MB',
+        f'{int(avg_lost)}'
     ])
 
     # Create table
@@ -140,10 +144,10 @@ def create_plots_for_file(filepath):
         return None, None
 
     # Set up the figure with better proportions for PDF
-    fig = plt.figure(figsize=(14, 10))
+    fig = plt.figure(figsize=(16, 12))
 
-    # Create a grid layout with title space and table
-    gs = fig.add_gridspec(4, 2, height_ratios=[0.08, 1, 0.6, 0.05], hspace=0.3, wspace=0.3)
+    # Create a grid layout with title space and table (3 plots in top row)
+    gs = fig.add_gridspec(4, 3, height_ratios=[0.08, 1, 0.6, 0.05], hspace=0.3, wspace=0.3)
 
     # Add main title
     title = get_title_from_filename(filepath)
@@ -152,6 +156,7 @@ def create_plots_for_file(filepath):
     # Create subplots in the middle row
     ax1 = fig.add_subplot(gs[1, 0])
     ax2 = fig.add_subplot(gs[1, 1])
+    ax3 = fig.add_subplot(gs[1, 2])
 
     # Plot 1: Bar chart showing CPU overhead with error bars
     rps_values = baseline_data['rps'].values
@@ -226,68 +231,35 @@ def create_plots_for_file(filepath):
         ax2.text(bar.get_x() + bar.get_width()/2., height,
                  f'{height:.0f}MB', ha='center', va='bottom', fontsize=9)
 
-    # Add performance table spanning both columns
+    # Plot 3: Bar chart showing Lost events (only for IG)
+    ig_lost = ig_data['lost'].values
+
+    bars5 = ax3.bar(x, ig_lost, width, label='IG (with tracer)', alpha=0.8, color='red')
+
+    ax3.set_xlabel('RPS (Requests per Second)', fontsize=11)
+    ax3.set_ylabel('Lost Events', fontsize=11)
+    ax3.set_title('Lost Events (IG only)', fontsize=12, fontweight='bold')
+    ax3.set_xticks(x)
+    ax3.set_xticklabels(rps_values)
+    ax3.legend()
+    ax3.grid(True, alpha=0.3, axis='y')
+
+    # Add value labels on Lost bars
+    for bar in bars5:
+        height = bar.get_height()
+        ax3.text(bar.get_x() + bar.get_width()/2., height,
+                 f'{int(height)}', ha='center', va='bottom', fontsize=9)
+
+    # Add performance table spanning all three columns
     ax_table = fig.add_subplot(gs[2, :])
     create_performance_table(ax_table, baseline_data, ig_data)
 
     # Add some summary statistics at the bottom
     avg_cpu_overhead = np.mean(ig_cpu - baseline_cpu)
     avg_mem_overhead = np.mean(ig_mem - baseline_mem)
-
-    summary_text = f"Average CPU Overhead: {avg_cpu_overhead:.2f}% | Average Memory Overhead: {avg_mem_overhead:.2f}MB"
-    fig.text(0.5, 0.02, summary_text, ha='center', va='bottom', fontsize=10, style='italic')
+    avg_lost = np.mean(ig_lost)
 
     return fig, df
-
-def print_statistics(filepath, df):
-    """Print statistics for a single file"""
-    baseline_data = df[df['Name'] == 'baseline']
-    ig_data = df[df['Name'] == 'ig']
-
-    if len(baseline_data) == 0 or len(ig_data) == 0:
-        return
-
-    rps_values = baseline_data['rps'].values
-    baseline_cpu = baseline_data['%cpu'].values
-    ig_cpu = ig_data['%cpu'].values
-    baseline_cpu_ci = baseline_data['cpu_ci'].values
-    ig_cpu_ci = ig_data['cpu_ci'].values
-    baseline_mem = baseline_data['mem(MB)'].values
-    ig_mem = ig_data['mem(MB)'].values
-    baseline_mem_ci = baseline_data['mem_ci'].values
-    ig_mem_ci = ig_data['mem_ci'].values
-
-    print(f"\n=== Performance Analysis for {os.path.basename(filepath)} ===")
-    print(f"Data points: {len(df)} configurations")
-    print(f"Runs per configuration: {baseline_data['runs'].iloc[0]}")
-    print("\nCPU Usage Summary:")
-    print(f"{'RPS':<10} {'Baseline':<15} {'IG':<15} {'Overhead':<15} {'Overhead %':<12}")
-    print("-" * 75)
-
-    for i, rps in enumerate(rps_values):
-        baseline_val = baseline_cpu[i]
-        baseline_ci = baseline_cpu_ci[i]
-        ig_val = ig_cpu[i]
-        ig_ci = ig_cpu_ci[i]
-        overhead = ig_val - baseline_val
-        overhead_pct = (overhead / baseline_val) * 100
-        print(f"{rps:<10} {baseline_val:.2f}±{baseline_ci:.2f}%{'':<4} {ig_val:.2f}±{ig_ci:.2f}%{'':<4} {overhead:<10.2f}%{'':<4} {overhead_pct:<12.1f}")
-
-    print(f"\nAverage CPU overhead: {np.mean(ig_cpu - baseline_cpu):.2f}% CPU")
-    print(f"Average CPU overhead percentage: {np.mean((ig_cpu - baseline_cpu) / baseline_cpu * 100):.1f}%")
-
-    print("\nMemory Usage Summary:")
-    print(f"{'RPS':<10} {'Baseline':<20} {'IG':<20} {'Overhead':<15} {'Overhead %':<12}")
-    print("-" * 85)
-
-    for i, rps in enumerate(rps_values):
-        baseline_val = baseline_mem[i]
-        baseline_ci = baseline_mem_ci[i]
-        ig_val = ig_mem[i]
-        ig_ci = ig_mem_ci[i]
-        overhead = ig_val - baseline_val
-        overhead_pct = (overhead / baseline_val) * 100
-        print(f"{rps:<10} {baseline_val:.2f}±{baseline_ci:.2f}MB{'':<5} {ig_val:.2f}±{ig_ci:.2f}MB{'':<5} {overhead:<10.2f}MB{'':<4} {overhead_pct:<12.2f}")
 
 # Create PDF with all plots
 with PdfPages(args.output) as pdf:
