@@ -310,7 +310,7 @@ component-tests:
 # BENCHMARKS_TESTS_PARAMS="-run TestBenchmarks/trace_dns" make benchmarks-test
 .PHONY: benchmarks-test
 benchmarks-test:
-	go test -exec sudo -v ./integration/benchmarks/... -benchmark -timeout 30m $$BENCHMARKS_TESTS_PARAMS
+	go test -exec sudo -v ./integration/benchmarks/... -benchmark -timeout 120m $$BENCHMARKS_TESTS_PARAMS
 
 .PHONY: website-local-update
 website-local-update:

@@ -48,8 +48,8 @@ type ServerConfig struct {
 }
 
 type GeneratorConfig struct {
-	Image      string `yaml:"image"`
-	Entrypoint string `yaml:"entrypoint"`
+	Image string `yaml:"image"`
+	Cmd   string `yaml:"cmd"`
 }
 
 func TestMain(m *testing.M) {
@@ -111,7 +111,7 @@ func TestBenchmarks(t *testing.T) {
 						GeneratorImage: testConfig.Generator.Image,
 						TestConfs:      []any{eventsPerSecond},
 						GeneratorCmd: func(serverIP string, a any) string {
-							cmd := testConfig.Generator.Entrypoint
+							cmd := testConfig.Generator.Cmd
 							// Replace placeholders with actual values
 							cmd = strings.ReplaceAll(cmd, "{serverIP}", serverIP)
 							cmd = strings.ReplaceAll(cmd, "{eventsPerSecond}", fmt.Sprintf("%d", a))
