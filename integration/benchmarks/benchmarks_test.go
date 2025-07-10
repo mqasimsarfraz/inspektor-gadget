@@ -106,30 +106,30 @@ func TestBenchmarks(t *testing.T) {
 	for gadgetName, testConfig := range config.Tests {
 		t.Run(gadgetName, func(t *testing.T) {
 			for _, eventsPerSecond := range testConfig.EventsPerSecond {
-				t.Run(fmt.Sprintf("%d_eps", eventsPerSecond), func(t *testing.T) {
-					c := &GadgetBenchTest{
-						Gadget:         gadgetName,
-						GeneratorImage: testConfig.Generator.Image,
-						TestConfs:      []any{eventsPerSecond},
-						GeneratorCmd: func(serverIP string, a any) string {
-							cmd := testConfig.Generator.Cmd
-							// Replace placeholders with actual values
-							cmd = strings.ReplaceAll(cmd, "{serverIP}", serverIP)
-							cmd = strings.ReplaceAll(cmd, "{eventsPerSecond}", fmt.Sprintf("%d", a))
-							return cmd
-						},
-						GadgetParams: testConfig.GadgetParams,
-					}
+				//t.Run(fmt.Sprintf("%d_eps", eventsPerSecond), func(t *testing.T) {
+				c := &GadgetBenchTest{
+					Gadget:         gadgetName,
+					GeneratorImage: testConfig.Generator.Image,
+					TestConfs:      []any{eventsPerSecond},
+					GeneratorCmd: func(serverIP string, a any) string {
+						cmd := testConfig.Generator.Cmd
+						// Replace placeholders with actual values
+						cmd = strings.ReplaceAll(cmd, "{serverIP}", serverIP)
+						cmd = strings.ReplaceAll(cmd, "{eventsPerSecond}", fmt.Sprintf("%d", a))
+						return cmd
+					},
+					GadgetParams: testConfig.GadgetParams,
+				}
 
-					if testConfig.Server != nil {
-						c.ServerCmd = func(rps any) string {
-							return testConfig.Server.Cmd
-						}
-						c.ServerImage = testConfig.Server.Image
+				if testConfig.Server != nil {
+					c.ServerCmd = func(rps any) string {
+						return testConfig.Server.Cmd
 					}
+					c.ServerImage = testConfig.Server.Image
+				}
 
-					RunGadgetBenchmark(t, c)
-				})
+				RunGadgetBenchmark(t, c)
+				//})
 			}
 		})
 	}
