@@ -12,6 +12,8 @@ import (
 
 var (
 	events          string
+	executionMode   string
+	numWorkers      int
 	eventsPerSecond int
 )
 
@@ -29,6 +31,10 @@ func main() {
 	// Add maxRPS flag to client command
 	rootCmd.PersistentFlags().IntVar(&eventsPerSecond, "events-per-second", 0, "Maximum requests per second (0 for unlimited)")
 
+	// Add execution mode flag and number of worker to root command
+	rootCmd.PersistentFlags().StringVar(&executionMode, "execution-mode", "goroutine", "Execution mode to use (goroutine or process)")
+	rootCmd.PersistentFlags().IntVar(&numWorkers, "num-workers", 50, "Number of workers to use for processing events")
+
 	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return handleEvents(events)
 	}
@@ -41,6 +47,10 @@ func main() {
 func handleEvents(events string) error {
 	if events == "" {
 		return nil // No events to handle
+	}
+
+	if executionMode != ExecutionModeGoroutine && executionMode != ExecutionModeProcess {
+		return fmt.Errorf("invalid execution mode: %s, must be either %q or %q", executionMode, ExecutionModeGoroutine, ExecutionModeProcess)
 	}
 
 	eventsParts := strings.Split(events, ",")

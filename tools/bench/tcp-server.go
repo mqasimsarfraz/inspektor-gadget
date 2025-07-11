@@ -10,7 +10,6 @@ import (
 
 const (
 	tcpListenAddr = "0.0.0.0:8080"
-	tcpNumWorkers = 50
 )
 
 type tcpServer struct {
@@ -28,9 +27,9 @@ func (s *tcpServer) Start() error {
 	}
 
 	s.listener = listener
-	fmt.Printf("TCP server listening on %s with %d worker goroutines\n", tcpListenAddr, tcpNumWorkers)
+	fmt.Printf("TCP server listening on %s with %d worker goroutines\n", tcpListenAddr, numWorkers)
 
-	for range tcpNumWorkers {
+	for range numWorkers {
 		go s.acceptConnections()
 	}
 	return nil

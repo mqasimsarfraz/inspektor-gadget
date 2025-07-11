@@ -39,3 +39,12 @@ tests:
       image: ghcr.io/mqasimsarfraz/bench
       cmd: /bench --events=tcp:server={serverIP}:8080 --events-per-second={eventsPerSecond}
     eventsPerSecond: [ 1024, 2048, 4096, 8192, 16384 ]
+  top_tcp:
+    gadgetName: top_tcp
+    server:
+      image: ghcr.io/mqasimsarfraz/bench
+      cmd: /bench --events=tcp-server
+    generator:
+      image: ghcr.io/mqasimsarfraz/bench
+      cmd: /bench --events=tcp:server={serverIP}:8080 --events-per-second={eventsPerSecond}
+    eventsPerSecond: [ 1024, 2048, 4096, 8192, 16384 ]

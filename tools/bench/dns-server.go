@@ -12,7 +12,6 @@ const (
 	listenAddr   = "0.0.0.0:5353"
 	targetDomain = "fake.test.com."
 	responseIP   = "1.2.3.4"
-	numWorkers   = 50
 )
 
 type dnsServer struct {
