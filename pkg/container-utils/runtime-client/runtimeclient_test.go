@@ -27,6 +27,7 @@ import (
 	runtimeclient "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils/runtime-client"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils/testutils"
 	containerutilsTypes "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils/types"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
 
 const (
@@ -49,11 +50,18 @@ func TestRuntimeClientInterface(t *testing.T) {
 			var expectedData []*runtimeclient.ContainerDetailsData
 			for i := 0; i < numContainers; i++ {
 				cn := fmt.Sprintf("%s-%s-%d", containerNamePrefix, runtime, i)
+				opts := []testutils.Option{
+					testutils.WithImage(containerImageName),
+				}
+				// we only support exit code validation for Docker runtime for now
+				if runtime == types.RuntimeNameDocker {
+					opts = append(opts, testutils.WithExpectedExitCodes(137))
+				}
 				c, err := testutils.NewContainer(
 					runtime,
 					cn,
 					"sleep inf", // We simply want to keep the container running
-					testutils.WithImage(containerImageName),
+					opts...,
 				)
 				require.Nil(t, err)
 				require.NotNil(t, c)

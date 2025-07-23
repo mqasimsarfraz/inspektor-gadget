@@ -57,6 +57,11 @@ func TestTraceBind(t *testing.T) {
 		containerOpts = append(containerOpts, containers.WithContainerNamespace(ns))
 	}
 
+	// 130 is the exit code when container is stopped with SIGINT (signal 2)
+	if codes := utils.GetExpectedExitCodes(130); len(codes) > 0 {
+		containerOpts = append(containerOpts, containers.WithExpectedExitCodes(codes))
+	}
+
 	testContainer := containerFactory.NewContainer(
 		containerName,
 		"while true; do setuidgid 1000:1111 nc -l -s 127.0.0.1 -p 9090 -w 1; sleep 0.1; done",

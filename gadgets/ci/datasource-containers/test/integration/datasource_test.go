@@ -59,6 +59,11 @@ func TestDatasourceContainers(t *testing.T) {
 		containerOpts = append(containerOpts, containers.WithContainerNamespace(ns))
 	}
 
+	// set expected exit code 137 (128 + 9 (SIGKILL)) as the container
+	if codes := utils.GetExpectedExitCodes(137); len(codes) > 0 {
+		containerOpts = append(containerOpts, containers.WithExpectedExitCodes(codes))
+	}
+
 	testContainer := containerFactory.NewContainer(
 		containerName,
 		"sleep inf",
@@ -139,6 +144,11 @@ func TestDatasourceContainersPreCreate(t *testing.T) {
 	if utils.CurrentTestComponent == utils.KubectlGadgetTestComponent {
 		ns = utils.GenerateTestNamespaceName(t, "test-datasource-containers")
 		containerOpts = append(containerOpts, containers.WithContainerNamespace(ns))
+	}
+
+	// set expected exit code 137 (128 + 9 (SIGKILL)) as the container
+	if codes := utils.GetExpectedExitCodes(137); len(codes) > 0 {
+		containerOpts = append(containerOpts, containers.WithExpectedExitCodes(codes))
 	}
 
 	testContainer := containerFactory.NewContainer(

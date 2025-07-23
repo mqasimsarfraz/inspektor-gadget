@@ -197,6 +197,7 @@ func StartRegistry(t *testing.T, name string) testutils.Container {
 		testutils.WithPortBindings(nat.PortMap{
 			"5000/tcp": []nat.PortBinding{{HostIP: "127.0.0.1"}},
 		}),
+		testutils.WithExpectedExitCodes(2), // registry returns exit code 2 when stopped using SIGINT
 	)
 	c.Start(t)
 	return c

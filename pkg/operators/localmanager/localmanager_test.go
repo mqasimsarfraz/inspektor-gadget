@@ -128,7 +128,7 @@ func TestLocalManagerClose(t *testing.T) {
 	err := host.Init(host.Config{})
 	require.NoError(t, err, "Failed to initialize host")
 
-	c := testutils.NewDockerContainer("test-lm-close", "sleep inf", testutils.WithoutLogs())
+	c := testutils.NewDockerContainer("test-lm-close", "sleep inf", testutils.WithoutLogs(), testutils.WithExpectedExitCodes(137))
 	c.Start(t)
 	t.Cleanup(func() {
 		c.Stop(t)

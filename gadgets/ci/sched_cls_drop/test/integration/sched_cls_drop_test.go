@@ -50,6 +50,15 @@ func TestSchedCLS(t *testing.T) {
 	serverContainerOpts := []containers.ContainerOption{containers.WithContainerImage(gadgettesting.NginxImage)}
 	clientContainerOpts := []containers.ContainerOption{containers.WithContainerImage(gadgettesting.NginxImage)}
 
+	// 130 is the exit code when container is stopped with SIGINT (signal 2)
+	if codes := utils.GetExpectedExitCodes(130); len(codes) > 0 {
+		clientContainerOpts = append(clientContainerOpts, containers.WithExpectedExitCodes(codes))
+	}
+	// 137 is the exit code when container is stopped with SIGKILL (signal 9)
+	if codes := utils.GetExpectedExitCodes(137); len(codes) > 0 {
+		serverContainerOpts = append(serverContainerOpts, containers.WithExpectedExitCodes(codes))
+	}
+
 	if utils.CurrentTestComponent == utils.KubectlGadgetTestComponent {
 		nsTest = utils.GenerateTestNamespaceName(t, "schedcls-test")
 		testutils.CreateK8sNamespace(t, nsTest)

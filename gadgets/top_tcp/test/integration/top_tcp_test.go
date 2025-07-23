@@ -65,6 +65,11 @@ func TestTopTcp(t *testing.T) {
 		containerOpts = append(containerOpts, containers.WithContainerNamespace(ns))
 	}
 
+	// 130 is the exit code when container is stopped with SIGINT (signal 2)
+	if codes := utils.GetExpectedExitCodes(130); len(codes) > 0 {
+		containerOpts = append(containerOpts, containers.WithExpectedExitCodes(codes))
+	}
+
 	// TODO: can't use setuidgid because it's not available on the nginx image
 	testContainer := containerFactory.NewContainer(
 		containerName,

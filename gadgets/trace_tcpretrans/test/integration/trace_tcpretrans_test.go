@@ -59,6 +59,11 @@ func TestTraceTCPretrans(t *testing.T) {
 	// run the container with privileged mode to be able to use tc command
 	containerOpts := []containers.ContainerOption{containers.WithContainerImage(containerImage), containers.WithPrivileged()}
 
+	// 130 is the exit code when container is stopped with SIGINT (signal 2)
+	if codes := utils.GetExpectedExitCodes(130); len(codes) > 0 {
+		containerOpts = append(containerOpts, containers.WithExpectedExitCodes(codes))
+	}
+
 	if utils.CurrentTestComponent == utils.KubectlGadgetTestComponent {
 		ns = utils.GenerateTestNamespaceName(t, "test-trace-tcpretrans")
 		containerOpts = append(containerOpts, containers.WithContainerNamespace(ns))

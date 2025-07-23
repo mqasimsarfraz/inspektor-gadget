@@ -99,6 +99,11 @@ int main() {
 		containerOpts = append(containerOpts, containers.WithContainerNamespace(ns))
 	}
 
+	// 130 is the exit code when container is stopped with SIGINT (signal 2)
+	if codes := utils.GetExpectedExitCodes(130); len(codes) > 0 {
+		containerOpts = append(containerOpts, containers.WithExpectedExitCodes(codes))
+	}
+
 	buildCmd := fmt.Sprintf("echo %s | base64 -d > chroot.c && gcc -Wall -static -o /bin/mychroot chroot.c", progBase64)
 	innerCmd := "while true; do /bin/mychroot ; nice -n -20 echo; sleep 0.1; done"
 	testContainer := containerFactory.NewContainer(

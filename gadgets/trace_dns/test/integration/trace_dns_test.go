@@ -95,6 +95,15 @@ func newTraceDNSStep(t *testing.T, tc testCase) (igtesting.TestStep, []igtesting
 	serverContainerOpts := []containers.ContainerOption{containers.WithContainerImage(tc.serverImage)}
 	clientContainerOpts := []containers.ContainerOption{containers.WithContainerImage(tc.clientImage)}
 
+	// 130 is the exit code when container is stopped with SIGINT (signal 2)
+	if codes := utils.GetExpectedExitCodes(130); len(codes) > 0 {
+		clientContainerOpts = append(clientContainerOpts, containers.WithExpectedExitCodes(codes))
+	}
+	// 2 is the exit code of dnstester when it receives SIGINT
+	if codes := utils.GetExpectedExitCodes(2); len(codes) > 0 {
+		serverContainerOpts = append(serverContainerOpts, containers.WithExpectedExitCodes(codes))
+	}
+
 	if utils.CurrentTestComponent == utils.KubectlGadgetTestComponent {
 		nsTest = utils.GenerateTestNamespaceName(t, tc.name)
 		testutils.CreateK8sNamespace(t, nsTest)

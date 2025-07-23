@@ -119,6 +119,11 @@ int main(int argc, char *argv[], char **envp) {
 		containerOpts = append(containerOpts, containers.WithContainerNamespace(ns))
 	}
 
+	// 137 is the exit code when container is stopped with SIGKILL (signal 9)
+	if codes := utils.GetExpectedExitCodes(137); len(codes) > 0 {
+		containerOpts = append(containerOpts, containers.WithExpectedExitCodes(codes))
+	}
+
 	buildCmd := fmt.Sprintf("echo %s | base64 -d > exec.c && gcc -Wall -o /bin/exec-syscall exec.c", progBase64)
 	prepareScriptsCmd := "printf '#!/bin/sh\nls' > /bin/with_shebeng.sh ; echo ls > /dev/script.sh ; echo ls > /bin/script.sh ; chmod +x /dev/script.sh /bin/script.sh /bin/with_shebeng.sh ; "
 	sleep1Args := []string{"/usr/bin/sleep", "0.4"}

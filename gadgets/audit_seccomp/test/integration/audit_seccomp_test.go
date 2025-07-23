@@ -77,6 +77,11 @@ func TestAuditSeccomp(t *testing.T) {
 		containers.WithContainerSeccompProfile(seccompProfile),
 	}
 
+	// 130 is the exit code when container is stopped with SIGINT (signal 2)
+	if codes := utils.GetExpectedExitCodes(130); len(codes) > 0 {
+		containerOpts = append(containerOpts, containers.WithExpectedExitCodes(codes))
+	}
+
 	switch utils.CurrentTestComponent {
 	case utils.KubectlGadgetTestComponent:
 		ns = utils.GenerateTestNamespaceName(t, "test-audit-seccomp")

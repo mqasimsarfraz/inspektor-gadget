@@ -51,6 +51,11 @@ func TestSnapshotProcess(t *testing.T) {
 		containerOpts = append(containerOpts, containers.WithContainerNamespace(ns))
 	}
 
+	// 130 is the exit code when container is stopped with SIGINT (signal 2)
+	if codes := utils.GetExpectedExitCodes(130); len(codes) > 0 {
+		containerOpts = append(containerOpts, containers.WithExpectedExitCodes(codes))
+	}
+
 	testContainer := containerFactory.NewContainer(
 		containerName,
 		"setuidgid 1000:1111 nc -l -p 9090",

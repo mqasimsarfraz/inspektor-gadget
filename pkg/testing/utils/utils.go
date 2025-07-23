@@ -269,3 +269,13 @@ func NormalizeString(f *string) {
 		*f = NormalizedStr
 	}
 }
+
+func GetExpectedExitCodes(codes ...int) []int {
+	// We only support checking exit code when running ig locally with Docker,
+	if CurrentTestComponent == IgLocalTestComponent {
+		if ContainerRuntime == eventtypes.RuntimeNameDocker.String() {
+			return codes
+		}
+	}
+	return nil
+}
