@@ -62,7 +62,7 @@ struct {
 
 #ifdef GADGET_TYPE_NETWORKING
 static __always_inline struct gadget_socket_value *
-gadget_socket_lookup(const struct __sk_buff *skb)
+gadget_socket_lookup_with_direction(const struct __sk_buff *skb, int is_ingress)
 {
 	struct gadget_socket_value *ret;
 	struct gadget_socket_key key = {
@@ -171,13 +171,13 @@ gadget_socket_lookup(const struct __sk_buff *skb)
 	int off = l4_off;
 	switch (key.proto) {
 	case IPPROTO_TCP:
-		if (skb->pkt_type == GADGET_SE_PACKET_HOST)
+		if (is_ingress)
 			off += GADGET_SE_TCPHDR_DEST_OFFSET;
 		else
 			off += GADGET_SE_TCPHDR_SOURCE_OFFSET;
 		break;
 	case IPPROTO_UDP:
-		if (skb->pkt_type == GADGET_SE_PACKET_HOST)
+		if (is_ingress)
 			off += GADGET_SE_UDPHDR_DEST_OFFSET;
 		else
 			off += GADGET_SE_UDPHDR_SOURCE_OFFSET;
@@ -204,6 +204,15 @@ gadget_socket_lookup(const struct __sk_buff *skb)
 	}
 
 	return 0;
+}
+
+// Backward compatibility wrapper
+static __always_inline struct gadget_socket_value *
+gadget_socket_lookup(const struct __sk_buff *skb)
+{
+	// Fall back to pkt_type for existing callers
+	int is_ingress = (skb->pkt_type == GADGET_SE_PACKET_HOST);
+	return gadget_socket_lookup_with_direction(skb, is_ingress);
 }
 #endif
 
