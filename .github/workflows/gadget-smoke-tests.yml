@@ -1,0 +1,233 @@
+name: Gadget Smoke Tests
+
+on:
+  push:
+    branches:
+      - main
+      - 'release-*'
+  pull_request:
+  schedule:
+    # Run nightly at 06:00 UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions: read-all
+
+env:
+  GADGET_RESULTS_DIR: /tmp/gadget-smoke-results
+
+jobs:
+  gadget-smoke-tests:
+    name: Gadget Smoke Tests
+    runs-on: ubuntu-latest
+    # Non-blocking: the summary provides findings without failing the overall
+    # workflow when individual gadgets encounter kernel-compatibility issues.
+    continue-on-error: true
+    permissions:
+      contents: read
+
+    steps:
+      - name: Install ig
+        id: install-ig
+        run: |
+          set -euo pipefail
+          IG_VERSION=$(curl -sSfL \
+            https://api.github.com/repos/inspektor-gadget/inspektor-gadget/releases/latest \
+            | jq -r '.tag_name')
+          echo "Installing ig ${IG_VERSION}"
+          curl -sSfL \
+            "https://github.com/inspektor-gadget/inspektor-gadget/releases/download/${IG_VERSION}/ig-linux-amd64-${IG_VERSION}.tar.gz" \
+            | sudo tar -C /usr/local/bin -xzf - ig
+          echo "ig_version=${IG_VERSION}" >> "$GITHUB_OUTPUT"
+          sudo ig version
+
+      - name: Run gadgets and capture results
+        id: run-gadgets
+        env:
+          IG_VERSION: ${{ steps.install-ig.outputs.ig_version }}
+        run: |
+          set -uo pipefail
+          mkdir -p "${GADGET_RESULTS_DIR}"
+
+          PASS_COUNT=0
+          FAIL_COUNT=0
+
+          # run_gadget <gadget_name> <timeout_secs> [workload_cmd]
+          #
+          # Runs `ig run <gadget>:<version>` under a timeout.
+          # Exit code 124 (timed out) is treated as success because streaming
+          # gadgets (trace_*, top_*, profile_*) are designed to run until
+          # explicitly stopped.
+          run_gadget() {
+            local gadget="$1"
+            local run_timeout="${2:-30}"
+            local workload_cmd="${3:-}"
+
+            local out="${GADGET_RESULTS_DIR}/${gadget}.out"
+            local err="${GADGET_RESULTS_DIR}/${gadget}.err"
+            local workload_pid=""
+
+            echo "::group::${gadget}"
+            echo "Running ${gadget}:${IG_VERSION} (timeout: ${run_timeout}s)..."
+
+            if [[ -n "$workload_cmd" ]]; then
+              bash -c "$workload_cmd" &
+              workload_pid=$!
+            fi
+
+            local rc=0
+            timeout "${run_timeout}" sudo ig run "${gadget}:${IG_VERSION}" \
+              --verify-image=false \
+              >"$out" 2>"$err" || rc=$?
+
+            if [[ -n "$workload_pid" ]]; then
+              kill "$workload_pid" 2>/dev/null || true
+              wait "$workload_pid" 2>/dev/null || true
+            fi
+
+            local lines
+            lines=$(wc -l < "$out")
+            echo "Exit code: ${rc} | Output lines: ${lines}"
+            if [[ -s "$err" ]]; then
+              echo "--- stderr ---"
+              cat "$err"
+              echo "--------------"
+            fi
+            echo "::endgroup::"
+
+            # exit code 124 = killed by timeout, which is expected for
+            # streaming gadgets that produce a continuous event stream.
+            if [[ $rc -eq 0 || $rc -eq 124 ]]; then
+              PASS_COUNT=$((PASS_COUNT + 1))
+              printf 'PASS\t%s\t%d\t\n' "$gadget" "$lines" \
+                >> "${GADGET_RESULTS_DIR}/results.tsv"
+            else
+              FAIL_COUNT=$((FAIL_COUNT + 1))
+              local msg
+              msg=$(head -1 "$err" 2>/dev/null | tr '\t' ' ' | cut -c1-120)
+              printf 'FAIL\t%s\t%d\t%s\n' "$gadget" "$rc" "${msg}" \
+                >> "${GADGET_RESULTS_DIR}/results.tsv"
+            fi
+          }
+
+          # ── Snapshot gadgets (single-shot; exit once the snapshot is taken) ──
+          run_gadget "snapshot_process" 30
+          run_gadget "snapshot_socket"  30
+
+          # ── Top gadgets (streaming; stopped by timeout) ───────────────────────
+          run_gadget "top_blockio"  15
+          run_gadget "top_file"     15
+          run_gadget "top_process"  15
+          run_gadget "top_tcp"      15
+
+          # ── Trace gadgets (streaming; workloads generate events) ──────────────
+          run_gadget "trace_bind"         15
+          run_gadget "trace_capabilities" 15
+          run_gadget "trace_dns"          15 \
+            "while true; do nslookup github.com >/dev/null 2>&1 || true; sleep 0.5; done"
+          run_gadget "trace_exec"         15 \
+            "while true; do ls /tmp >/dev/null 2>&1; sleep 0.2; done"
+          run_gadget "trace_fsslower"     15 \
+            "while true; do dd if=/dev/zero of=/tmp/ig_test_file bs=1M count=10 2>/dev/null; rm -f /tmp/ig_test_file; done"
+          run_gadget "trace_mount"        15
+          run_gadget "trace_oomkill"      15
+          run_gadget "trace_open"         15 \
+            "while true; do ls /tmp >/dev/null 2>&1; sleep 0.2; done"
+          run_gadget "trace_signal"       15
+          run_gadget "trace_tcp"          15 \
+            "while true; do curl -sSf --max-time 2 https://github.com -o /dev/null 2>/dev/null || true; sleep 1; done"
+          run_gadget "trace_tcpdrop"      15
+          run_gadget "trace_tcpretrans"   15
+
+          # ── Profile gadgets (collect profiling data; stopped by timeout) ──────
+          run_gadget "profile_blockio" 15 \
+            "while true; do dd if=/dev/zero of=/tmp/ig_test_file bs=1M count=10 2>/dev/null; rm -f /tmp/ig_test_file; sleep 0.1; done"
+          run_gadget "profile_cpu"     15 \
+            "while true; do dd if=/dev/zero of=/dev/null bs=1M count=100 2>/dev/null; done"
+
+          # ── Audit gadgets ─────────────────────────────────────────────────────
+          run_gadget "audit_seccomp" 15
+
+          # ── Statistics gadgets ────────────────────────────────────────────────
+          run_gadget "bpfstats" 15
+
+          echo "pass_count=${PASS_COUNT}" >> "$GITHUB_OUTPUT"
+          echo "fail_count=${FAIL_COUNT}" >> "$GITHUB_OUTPUT"
+
+          # Fail the step so that the job is visibly annotated when gadgets fail,
+          # while continue-on-error at the job level keeps the PR check green.
+          [[ $FAIL_COUNT -eq 0 ]] || exit 1
+
+      - name: Generate summary report
+        if: always()
+        env:
+          IG_VERSION: ${{ steps.install-ig.outputs.ig_version }}
+          PASS_COUNT: ${{ steps.run-gadgets.outputs.pass_count || '0' }}
+          FAIL_COUNT: ${{ steps.run-gadgets.outputs.fail_count || '0' }}
+        run: |
+          set -uo pipefail
+          RESULTS_FILE="${GADGET_RESULTS_DIR}/results.tsv"
+
+          {
+            echo "# 🔍 Gadget Smoke Test Results"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| **ig version** | \`${IG_VERSION:-unknown}\` |"
+            echo "| **Kernel** | \`$(uname -r)\` |"
+            echo "| **Runner OS** | \`$(uname -s) $(uname -m)\` |"
+            echo "| **Date (UTC)** | $(date -u '+%Y-%m-%d %H:%M:%S') |"
+            echo ""
+            echo "## Summary"
+            echo ""
+            echo "✅ **${PASS_COUNT} passed** &nbsp;|&nbsp; ❌ **${FAIL_COUNT} failed**"
+            echo ""
+            echo "## Gadget Results"
+            echo ""
+            echo "| Gadget | Status | Output lines | Notes |"
+            echo "|--------|:------:|:------------:|-------|"
+
+            if [[ -f "$RESULTS_FILE" ]]; then
+              while IFS=$'\t' read -r status gadget metric notes; do
+                if [[ "$status" == "PASS" ]]; then
+                  echo "| \`${gadget}\` | ✅ | ${metric} | ${notes} |"
+                else
+                  echo "| \`${gadget}\` | ❌ | — | Exit ${metric}: ${notes} |"
+                fi
+              done < "$RESULTS_FILE"
+            else
+              echo "| — | ⚠️ | — | No results file found; run-gadgets step may have failed before producing output |"
+            fi
+
+            if [[ "${FAIL_COUNT:-0}" != "0" ]] && [[ -f "$RESULTS_FILE" ]]; then
+              echo ""
+              echo "## ❌ Failure Details"
+              echo ""
+              while IFS=$'\t' read -r status gadget exit_code error_msg; do
+                [[ "$status" != "FAIL" ]] && continue
+                echo "<details>"
+                echo "<summary><code>${gadget}</code> — exit code ${exit_code}</summary>"
+                echo ""
+                err_file="${GADGET_RESULTS_DIR}/${gadget}.err"
+                if [[ -f "$err_file" && -s "$err_file" ]]; then
+                  echo "\`\`\`"
+                  cat "$err_file"
+                  echo "\`\`\`"
+                else
+                  echo "_No stderr output captured._"
+                fi
+                echo ""
+                echo "</details>"
+                echo ""
+              done < "$RESULTS_FILE"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload gadget logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gadget-smoke-test-logs
+          path: ${{ env.GADGET_RESULTS_DIR }}
+          retention-days: 7
+          if-no-files-found: ignore
