@@ -52,6 +52,7 @@ GADGETS ?= \
 	trace_oomkill \
 	trace_init_module \
 	trace_open \
+	trace_redis \
 	trace_signal \
 	trace_sni \
 	trace_ssl \

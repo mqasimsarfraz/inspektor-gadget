@@ -1,0 +1,29 @@
+# Artifact Hub package metadata file
+version: 0.1.0
+name: "trace redis"
+category: monitoring-logging
+displayName: "trace redis"
+createdAt: "2026-07-03T00:00:00Z"
+digest: "2026-07-03T00:00:00Z"
+description: "trace Redis commands and replies (including errors and latency)"
+logoURL: "https://inspektor-gadget.io/media/brand-icon.svg"
+license: ""
+homeURL: "https://inspektor-gadget.io/docs/latest/gadgets/trace_redis"
+containersImages:
+    - name: gadget
+      image: "ghcr.io/inspektor-gadget/gadget/trace_redis:latest"
+      platforms:
+        - linux/amd64
+        - linux/arm64
+keywords:
+    - gadget
+links:
+    - name: source
+      url: "https://github.com/inspektor-gadget/inspektor-gadget/tree/main/gadgets/trace_redis"
+install: |
+    # Run
+    ```bash
+    sudo ig run ghcr.io/inspektor-gadget/gadget/trace_redis:latest
+    ```
+provider:
+    name: Inspektor Gadget

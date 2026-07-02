@@ -1,0 +1,87 @@
+name: trace redis
+description: trace Redis commands and replies (including errors and latency)
+homepageURL: https://inspektor-gadget.io/
+documentationURL: https://www.inspektor-gadget.io/docs/latest/gadgets/trace_redis
+sourceURL: https://github.com/inspektor-gadget/inspektor-gadget/tree/main/gadgets/trace_redis
+datasources:
+  redis:
+    fields:
+      src:
+        annotations:
+          description: Source endpoint (the client)
+          template: l4endpoint
+      dst:
+        annotations:
+          description: Destination endpoint (the Redis server)
+          template: l4endpoint
+      type:
+        annotations:
+          description: Whether this message is a command sent by the client or a reply from the server.
+          value.one-of: "command, reply"
+          columns.minwidth: "7"
+          columns.width: "7"
+      type_raw:
+        annotations:
+          description: Raw numeric type value (0=command, 1=reply).
+          columns.hidden: "true"
+          json.skip: "true"
+      command:
+        annotations:
+          description: Redis command verb (e.g. GET, SET, HSET). Empty for replies.
+          columns.width: "10"
+          columns.maxwidth: "16"
+      key:
+        annotations:
+          description: First argument of the command, which is the key for most Redis commands. Empty for replies and keyless commands.
+          columns.width: "24"
+      args:
+        annotations:
+          description: Command arguments (everything after the command verb), space-separated and truncated. Empty for replies.
+          columns.width: "32"
+          columns.hidden: "true"
+      reply:
+        annotations:
+          description: >-
+            Summary of the server reply. For errors it is the error message
+            (see the error field); for other reply types it is a short
+            representation (e.g. OK, an integer, (nil), or the size of an
+            aggregate). Empty for commands.
+          columns.width: "32"
+      error:
+        annotations:
+          description: True when the reply is a Redis error (RESP error or bulk error). Empty/false for commands.
+          columns.minwidth: "5"
+          columns.width: "6"
+      proc.pid:
+        annotations:
+          columns.hidden: "true"
+      proc.tid:
+        annotations:
+          columns.hidden: "true"
+      proc.parent.tid:
+        annotations:
+          columns.hidden: "true"
+      latency_ns:
+        annotations:
+          description: Time between the command being sent and its reply being received on the same connection. Only set on replies.
+      latency_ns_raw:
+        annotations:
+          description: Raw numeric latency_ns value in nanoseconds.
+          columns.hidden: "true"
+          json.skip: "true"
+      data:
+        annotations:
+          description: Raw RESP bytes. For internal use only (parsed into the other fields).
+          columns.hidden: "true"
+          json.skip: "true"
+      data_len:
+        annotations:
+          description: Full length of the RESP message. For internal use only.
+          columns.hidden: "true"
+          json.skip: "true"
+
+# The framework owns the sock_ops that selects which sockets to track (see the
+# Sockhash operator). Tell it which TCP port(s) this gadget cares about; a user
+# can override it at runtime with --operator-Sockhash-tcp-stream-ports.
+paramDefaults:
+  operator.Sockhash.tcp-stream-ports: "6379"

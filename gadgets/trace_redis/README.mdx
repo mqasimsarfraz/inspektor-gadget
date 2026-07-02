@@ -1,0 +1,198 @@
+---
+title: trace_redis
+sidebar_position: 0
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# trace_redis
+
+The `trace_redis` gadget traces [Redis](https://redis.io/) commands and replies
+by parsing the [RESP](https://redis.io/docs/latest/develop/reference/protocol-spec/)
+protocol on the TCP stream. For each request it shows the command, its key and
+arguments; for each reply it shows a short summary, whether it is an error, and
+the round-trip latency of the command that produced it.
+
+This makes it useful for troubleshooting Redis clients: spotting slow commands,
+failing commands (e.g. `WRONGTYPE`, `NOAUTH`, `OOM`), unexpected `(nil)`
+responses (cache misses), and which container/pod is issuing them.
+
+## Requirements
+
+- Minimum Kernel Version : 5.7
+
+  The gadget uses the `sock_ops` + `sk_skb` + `sk_msg` program types and a
+  `BPF_MAP_TYPE_SOCKHASH` map (see [Parsing TCP-stream protocols](../gadget-devel/tcp-stream-gadgets.md)).
+  Kernel BTF is required for the process/container enrichment.
+
+## How it works
+
+The gadget observes only the **client side** of a connection, i.e. sockets whose
+port is the Redis port (`6379` by default, configurable with
+`--operator-Sockhash-tcp-stream-ports`). On such a socket:
+
+- commands the client **sends** are captured on the send path (`sk_msg`), and
+- replies the client **receives** are captured on the receive path (`sk_skb`).
+
+Only newly established connections are traced; connections that already existed
+when the gadget started are not observed. Process/container enrichment covers the
+active (client) side only.
+
+Only the first 256 bytes of each RESP message are captured, which is enough for
+the command verb, the key and short replies/errors — the value payload of a
+large `SET` or the full body of a large reply is intentionally not captured.
+
+## Getting started
+
+Running the gadget:
+
+<Tabs groupId="env">
+    <TabItem value="kubectl-gadget" label="kubectl gadget">
+        ```bash
+        $ kubectl gadget run ghcr.io/inspektor-gadget/gadget/trace_redis:%IG_TAG% [flags]
+        ```
+    </TabItem>
+
+    <TabItem value="ig" label="ig">
+        ```bash
+        $ sudo ig run ghcr.io/inspektor-gadget/gadget/trace_redis:%IG_TAG% [flags]
+        ```
+    </TabItem>
+</Tabs>
+
+## Flags
+
+### `--operator-Sockhash-tcp-stream-ports`
+
+Comma-separated TCP port(s) of the Redis server to trace. Connections whose local
+or remote port matches are traced. Defaults to `6379`.
+
+This flag is provided by the framework's `Sockhash` operator, which owns the
+`sock_ops` program that selects sockets to track (see
+[Parsing TCP-stream protocols](../gadget-devel/tcp-stream-gadgets.md)).
+
+## Guide
+
+<Tabs groupId="env">
+    <TabItem value="ig" label="ig">
+        Start a Redis server in a container:
+
+        ```bash
+        $ docker run -d --name my-redis redis:7
+        ```
+
+        Start the gadget in a terminal:
+
+        ```bash
+        $ sudo ig run trace_redis:%IG_TAG% --containername my-redis-client
+        RUNTIME.CONTAINERNAME   COMM        PID       TID       SRC                DST                TYPE     COMMAND   KEY       REPLY               ERROR   LATENCY_NS
+        ```
+
+        In another terminal, run a client container that talks to Redis:
+
+        ```bash
+        $ docker run -it --rm --name my-redis-client --link my-redis redis:7 \
+            sh -c 'redis-cli -h my-redis set mykey hello; \
+                   redis-cli -h my-redis get mykey; \
+                   redis-cli -h my-redis get missing; \
+                   redis-cli -h my-redis lpush mykey x'
+        ```
+
+        Go back to the terminal where the gadget is running. The commands and
+        replies are logged by the gadget:
+
+        ```bash
+        RUNTIME.CONTAINERNAME   COMM        PID       TID       SRC                DST                TYPE     COMMAND   KEY       REPLY               ERROR   LATENCY_NS
+        my-redis-client         redis-cli   700123    700123    10.0.0.3:43944     10.0.0.2:6379      command  SET       mykey                                 false        0ns
+        my-redis-client         redis-cli   700123    700123    10.0.0.3:43944     10.0.0.2:6379      reply                             OK                  false     219.35µs
+        my-redis-client         redis-cli   700130    700130    10.0.0.3:43946     10.0.0.2:6379      command  GET       mykey                                 false        0ns
+        my-redis-client         redis-cli   700130    700130    10.0.0.3:43946     10.0.0.2:6379      reply                             (bulk: 5 bytes)     false     147.38µs
+        my-redis-client         redis-cli   700137    700137    10.0.0.3:43962     10.0.0.2:6379      command  GET       missing                               false        0ns
+        my-redis-client         redis-cli   700137    700137    10.0.0.3:43962     10.0.0.2:6379      reply                             (nil)               false     107.09µs
+        my-redis-client         redis-cli   700144    700144    10.0.0.3:43980     10.0.0.2:6379      command  LPUSH     mykey                                 false        0ns
+        my-redis-client         redis-cli   700144    700144    10.0.0.3:43980     10.0.0.2:6379      reply                             WRONGTYPE Operat…   true      143.13µs
+        ```
+
+        Note how the `LPUSH` against a string key is reported as an error
+        (`ERROR=true`), and the `GET missing` returns `(nil)` (a cache miss).
+    </TabItem>
+
+    <TabItem value="kubectl-gadget" label="kubectl gadget">
+        Run the gadget in a terminal:
+
+        ```bash
+        $ kubectl gadget run trace_redis:%IG_TAG%
+        K8S.NODE   K8S.NAMESPACE   K8S.PODNAME   K8S.CONTAINERNAME   COMM   ...   TYPE   COMMAND   KEY   REPLY   ERROR   LATENCY_NS
+        ```
+
+        Deploy a Redis server and a client pod that issues some commands, then
+        watch the commands and replies appear in the gadget terminal, enriched
+        with the pod and namespace of the client.
+    </TabItem>
+</Tabs>
+
+## Fields
+
+The most relevant fields are:
+
+- `type`: `command` (sent by the client) or `reply` (from the server).
+- `command`: the Redis command verb (e.g. `GET`, `SET`, `HSET`).
+- `key`: the first argument of the command (the key for most commands).
+- `args`: the full argument list of the command (hidden by default; available in
+  JSON output).
+- `reply`: a short summary of the reply — a simple string like `OK`, an integer,
+  `(nil)`, the error message, or the size of an aggregate (e.g.
+  `(array: 6 elements)`, `(bulk: 5 bytes)`).
+- `error`: `true` when the reply is a Redis error.
+- `latency_ns`: time between the command being sent and its reply being received
+  on the same connection (set on replies only).
+
+## How replies are framed
+
+Redis speaks RESP over a TCP **byte stream**: a single command or reply can be
+any size and does not map to a single TCP segment. Unlike DNS-over-TCP, RESP has
+no whole-message length prefix and no per-message framing — the first byte is
+only a *type* byte (`+ - : $ * ...`), and those same bytes occur freely inside
+payloads. There is therefore no reliable way to look at an arbitrary chunk of the
+stream and tell whether it is the *start* of a reply or the *middle* of a large
+one.
+
+This gadget attaches to the reassembled TCP stream (via `sk_skb`/`sk_msg`), so
+the bytes it sees are already in order and de-duplicated. However, it does **not**
+install a `sk_skb/stream_parser`, so the receive-side verdict still runs once per
+in-order segment. A large reply (for example the ~40&nbsp;KB `COMMAND DOCS`
+response that `redis-cli` fetches at startup, an `array` of hundreds of elements)
+spans many segments, and without framing each continuation segment would look
+like a separate — and unparseable — reply.
+
+To avoid emitting a burst of empty reply rows for one logical reply, the gadget
+reports a reply **only when it matches an outstanding command** on the same
+connection (recorded by the send path). The first segment of a reply consumes
+that match and is emitted as a single event; later continuation segments of the
+same reply find no match and are dropped. This keeps the output to one reply per
+command and drives the `latency_ns` calculation, at the cost of the limitations
+below.
+
+## Limitations
+
+- Only the client side of connections whose remote port is the Redis port is
+  traced; server-to-server traffic and connections established before the gadget
+  started are not observed.
+- Only the first 256 bytes of each RESP message are parsed, so large keys,
+  arguments and reply bodies are truncated (the `reply` field summarizes large
+  replies as e.g. `(array: 872 elements)` rather than dumping the whole body).
+- A reply is reported only if it can be matched to a preceding command on the
+  connection (see [How replies are framed](#how-replies-are-framed)). As a
+  consequence, **server-initiated data with no preceding command is not
+  reported** — this includes RESP3 push messages, Pub/Sub deliveries
+  (`SUBSCRIBE`/`PSUBSCRIBE`) and keyspace notifications.
+- Latency and command↔reply pairing assume a **synchronous** request/response
+  pattern (send a command, read its reply, repeat). With **pipelining** (several
+  commands sent before their replies are read) only the most recent command's
+  send time is retained, so latency is attributed approximately and some replies
+  may be dropped. Proper pipelining support would require a `stream_parser` plus
+  a per-connection FIFO of outstanding commands.
+- TLS-encrypted Redis connections cannot be parsed, since the gadget observes the
+  (encrypted) TCP stream.
+
