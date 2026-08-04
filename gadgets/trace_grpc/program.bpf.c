@@ -21,16 +21,19 @@
 enum grpc_event_type {
 	GRPC_EVENT_CALL = 0, // newClientStream: RPC initiated
 	GRPC_EVENT_SEND = 1, // sendMsg: message sent on wire
+	GRPC_EVENT_COMPLETE = 2, // clientStream.finish: RPC completed
 };
 
 struct event {
 	gadget_timestamp timestamp_raw;
 	struct gadget_process proc;
 	char method[METHOD_MAX_LEN];
+	gadget_duration latency_ns_raw;
 	enum grpc_event_type type_raw;
 	__u32 payload_len; // full payload length from gRPC frame header
-	__u8 compressed; // compression flag from gRPC frame header
 	__u32 captured_len; // bytes actually captured in payload[]
+	__u8 compressed; // compression flag from gRPC frame header
+	__u8 failed;
 	__u8 payload[MAX_PAYLOAD_SIZE];
 };
 
@@ -40,19 +43,21 @@ struct event {
 GADGET_TRACER_MAP(events, 1024 * 256);
 GADGET_TRACER(grpc, events, event);
 
-// Correlation map: goroutine pointer → method string.
-// Used to associate newClientStream (method) with sendMsg (payload).
+// Correlation map: goroutine pointer → in-flight RPC.
+// Used to associate newClientStream with sendMsg and clientStream.finish.
 // Limitation: only reliable for sequential unary RPCs per goroutine.
-struct method_info {
+struct rpc_info {
 	char method[METHOD_MAX_LEN];
+	__u64 start_ns;
 };
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
+	// Supports up to 10240 concurrently in-flight RPC goroutines.
 	__uint(max_entries, 10240);
 	__type(key, __u64);
-	__type(value, struct method_info);
-} goroutine_method SEC(".maps");
+	__type(value, struct rpc_info);
+} gadget_inflight_rpcs SEC(".maps");
 
 // google.golang.org/grpc.newClientStream is the convergence point for both
 // unary (Invoke) and streaming (NewStream) RPCs.
@@ -79,12 +84,15 @@ int uprobe_new_client_stream(struct pt_regs *ctx)
 		method_len = METHOD_MAX_LEN - 1;
 
 	// Store method in goroutine correlation map for sendMsg lookup
-	struct method_info info = {};
+	struct rpc_info info = {};
 	bpf_probe_read_user(info.method, method_len & (METHOD_MAX_LEN - 1),
 			    (void *)method_ptr);
+	info.start_ns = bpf_ktime_get_boot_ns();
 
 	__u64 goroutine = (__u64)GOROUTINE_PTR(ctx);
-	bpf_map_update_elem(&goroutine_method, &goroutine, &info, BPF_ANY);
+	if (bpf_map_update_elem(&gadget_inflight_rpcs, &goroutine, &info,
+				BPF_ANY))
+		return 0;
 
 	// Emit call event (no payload)
 	struct event *event;
@@ -92,13 +100,15 @@ int uprobe_new_client_stream(struct pt_regs *ctx)
 	if (!event)
 		return 0;
 
-	event->timestamp_raw = bpf_ktime_get_boot_ns();
+	event->timestamp_raw = info.start_ns;
 	gadget_process_populate(&event->proc);
 	event->type_raw = GRPC_EVENT_CALL;
 	__builtin_memcpy(event->method, info.method, METHOD_MAX_LEN);
 	event->payload_len = 0;
 	event->compressed = 0;
 	event->captured_len = 0;
+	event->latency_ns_raw = 0;
+	event->failed = 0;
 
 	gadget_submit_buf(ctx, &events, event, BASE_EVENT_SIZE);
 	return 0;
@@ -167,8 +177,8 @@ int uprobe_cs_attempt_send_msg(struct pt_regs *ctx)
 	event->type_raw = GRPC_EVENT_SEND;
 
 	// Look up method from goroutine correlation map
-	struct method_info *info =
-		bpf_map_lookup_elem(&goroutine_method, &goroutine);
+	struct rpc_info *info =
+		bpf_map_lookup_elem(&gadget_inflight_rpcs, &goroutine);
 	if (info) {
 		__builtin_memcpy(event->method, info->method, METHOD_MAX_LEN);
 	} else {
@@ -177,6 +187,8 @@ int uprobe_cs_attempt_send_msg(struct pt_regs *ctx)
 
 	event->payload_len = payload_len;
 	event->compressed = compressed;
+	event->latency_ns_raw = 0;
+	event->failed = 0;
 
 	if (payld_slice_len > 0 && payld_ptr != 0 && copy_len > 0) {
 		// Read first interface element: (itab_ptr[8], value_ptr[8])
@@ -204,6 +216,45 @@ int uprobe_cs_attempt_send_msg(struct pt_regs *ctx)
 
 	event->captured_len = captured_len;
 	gadget_submit_buf(ctx, &events, event, EVENT_SIZE(captured_len));
+	return 0;
+}
+
+// clientStream.finish is called once when a unary RPC completes.
+//
+// Signature:
+//   func (cs *clientStream) finish(err error)
+//
+// Go register ABI parameter assignment:
+//   cs (*clientStream) → GO_PARAM1
+//   err (interface)    → GO_PARAM2 (type), GO_PARAM3 (value)
+SEC("uprobe//tmp/ig-tests/trace-grpc-workload/client:google.golang.org/grpc.(*clientStream).finish")
+int uprobe_client_stream_finish(struct pt_regs *ctx)
+{
+	__u64 goroutine = (__u64)GOROUTINE_PTR(ctx);
+	struct rpc_info *info =
+		bpf_map_lookup_elem(&gadget_inflight_rpcs, &goroutine);
+	if (!info)
+		return 0;
+
+	__u64 now = bpf_ktime_get_boot_ns();
+	struct event *event = gadget_reserve_buf(&events, BASE_EVENT_SIZE);
+	if (!event)
+		goto cleanup;
+
+	event->timestamp_raw = now;
+	gadget_process_populate(&event->proc);
+	event->type_raw = GRPC_EVENT_COMPLETE;
+	__builtin_memcpy(event->method, info->method, METHOD_MAX_LEN);
+	event->payload_len = 0;
+	event->compressed = 0;
+	event->captured_len = 0;
+	event->latency_ns_raw = now - info->start_ns;
+	event->failed = (__u64)GO_PARAM2(ctx) != 0;
+
+	gadget_submit_buf(ctx, &events, event, BASE_EVENT_SIZE);
+
+cleanup:
+	bpf_map_delete_elem(&gadget_inflight_rpcs, &goroutine);
 	return 0;
 }
 

@@ -30,11 +30,11 @@ datasources:
           columns.width: 64
       type_raw:
         annotations:
-          description: "Event type: 0=call (RPC initiated), 1=send (message sent)"
+          description: "Event type: 0=call (RPC initiated), 1=send (message sent), 2=complete (RPC finished)"
           columns.hidden: "true"
       type:
         annotations:
-          description: "Event type: GRPC_EVENT_CALL or GRPC_EVENT_SEND"
+          description: "Event type: GRPC_EVENT_CALL, GRPC_EVENT_SEND, or GRPC_EVENT_COMPLETE"
           columns.width: 4
       service:
         annotations:
@@ -56,6 +56,14 @@ datasources:
         annotations:
           description: Bytes of payload actually captured
           columns.hidden: "true"
+      latency_ns_raw:
+        annotations:
+          description: Client-observed RPC latency, populated on completion events
+          columns.width: 12
+      failed:
+        annotations:
+          description: Whether the RPC completed with an error
+          columns.width: 8
       payload:
         annotations:
           description: Raw protobuf payload bytes (internal use)

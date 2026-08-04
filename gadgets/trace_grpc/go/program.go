@@ -31,6 +31,7 @@ import (
 const (
 	newClientStreamSymbol = "google.golang.org/grpc.newClientStream"
 	sendMsgSymbol         = "google.golang.org/grpc.(*csAttempt).sendMsg"
+	finishSymbol          = "google.golang.org/grpc.(*clientStream).finish"
 )
 
 var payload []byte
@@ -57,6 +58,8 @@ func gadgetPreStart() int32 {
 		target+":"+newClientStreamSymbol)
 	api.SetConfig("programs.uprobe_cs_attempt_send_msg.attach_to",
 		target+":"+sendMsgSymbol)
+	api.SetConfig("programs.uprobe_client_stream_finish.attach_to",
+		target+":"+finishSymbol)
 	return 0
 }
 

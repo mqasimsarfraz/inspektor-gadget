@@ -37,6 +37,7 @@ type server struct {
 }
 
 func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloReply, error) {
+	time.Sleep(100 * time.Millisecond)
 	return &pb.HelloReply{Message: "Hello " + in.GetName()}, nil
 }
 
