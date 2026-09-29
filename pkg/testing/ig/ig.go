@@ -18,6 +18,7 @@
 package ig
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
@@ -143,6 +144,13 @@ func New(image string, opts ...Option) igtesting.TestStep {
 	if flags, ok := os.LookupEnv("IG_FLAGS"); ok {
 		split := strings.Split(flags, " ")
 		factoryRunner.flags = append(factoryRunner.flags, split...)
+	}
+	if publicKey := os.Getenv("IG_PUBLIC_KEY_BASE64"); publicKey != "" {
+		decoded, err := base64.StdEncoding.DecodeString(publicKey)
+		if err != nil {
+			panic(fmt.Sprintf("decoding IG_PUBLIC_KEY_BASE64: %v", err))
+		}
+		factoryRunner.flags = append(factoryRunner.flags, "--public-keys="+string(decoded))
 	}
 
 	for _, opt := range opts {

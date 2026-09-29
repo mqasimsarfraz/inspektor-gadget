@@ -16,6 +16,7 @@ package gadgetrunner
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -106,6 +107,15 @@ func NewGadgetRunner[T any](t *testing.T, opts GadgetRunnerOpts[T]) *GadgetRunne
 		} else {
 			opts.GlobalParamsValues["operator.oci.verify-image"] = verifyImage
 		}
+	}
+
+	if publicKey := os.Getenv("IG_PUBLIC_KEY_BASE64"); publicKey != "" {
+		decoded, err := base64.StdEncoding.DecodeString(publicKey)
+		require.NoError(t, err, "decoding IG_PUBLIC_KEY_BASE64")
+		if opts.GlobalParamsValues == nil {
+			opts.GlobalParamsValues = make(api.ParamValues)
+		}
+		opts.GlobalParamsValues["operator.oci.public-keys"] = string(decoded)
 	}
 
 	gadgetImage := GetGadgetImageName(opts.Image)

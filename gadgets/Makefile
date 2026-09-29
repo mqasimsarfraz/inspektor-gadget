@@ -4,6 +4,7 @@ ROOT_DIR:=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
 GADGET_TAG ?= $(shell ../tools/image-tag branch)
 GADGET_REPOSITORY ?= ghcr.io/inspektor-gadget/gadget
+GADGET_ARCHIVE ?= gadgets.tar
 BUILDER_IMAGE ?= ghcr.io/inspektor-gadget/gadget-builder:main
 KERNEL_REPOSITORY ?= ghcr.io/inspektor-gadget/ci-kernels
 IG ?= ig
@@ -98,6 +99,13 @@ GADGETS_README_DEV = $(filter-out ci/%, $(addsuffix /dev.md, $(GADGETS)))
 .PHONY: list-gadgets
 list-gadgets:
 	@printf '%s\n' $(GADGETS)
+
+.PHONY: export
+export:
+	@test -n "$(strip $(GADGETS))" || { echo "No gadget images to export" >&2; exit 1; }
+	$(SUDO) $(IG) image export \
+		$(foreach gadget,$(GADGETS),"$(GADGET_REPOSITORY)/$(gadget):$(GADGET_TAG)") \
+		"$(GADGET_ARCHIVE)"
 
 .PHONY: all
 all: build

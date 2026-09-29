@@ -15,6 +15,7 @@
 package tests
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -66,6 +67,11 @@ func TestDaemonHeadless(t *testing.T) {
 	flags := os.Getenv("IG_FLAGS")
 	if flags != "" {
 		igDaemonFlags = append(igDaemonFlags, strings.Split(flags, " ")...)
+	}
+	if publicKey := os.Getenv("IG_PUBLIC_KEY_BASE64"); publicKey != "" {
+		decoded, err := base64.StdEncoding.DecodeString(publicKey)
+		require.NoError(t, err, "decoding IG_PUBLIC_KEY_BASE64")
+		igDaemonFlags = append(igDaemonFlags, "--public-keys="+string(decoded))
 	}
 	igtesting.RunTestSteps([]igtesting.TestStep{
 		&command.Command{
