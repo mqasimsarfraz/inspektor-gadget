@@ -1,0 +1,29 @@
+name: "Download gadget images"
+description: "Download and import the gadget images built for the current pull request."
+
+inputs:
+  ig:
+    description: "Path to the ig binary used to import gadget images."
+    required: false
+    default: "ig"
+
+outputs:
+  archive-path:
+    description: "Path to the downloaded gadget image archive."
+    value: ${{ steps.download.outputs.path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Download gadget image archive
+      id: download
+      uses: mqasimsarfraz/oci-artifact-action@dc3499eb3fc4d26b26e70500be982c7aec15d813 # v1.0.0
+      with:
+        operation: download
+        correlation-id: gadgets-${{ github.sha }}
+    - name: Import gadget images
+      shell: bash
+      env:
+        GADGET_ARCHIVE: ${{ steps.download.outputs.path }}
+        IG: ${{ inputs.ig }}
+      run: sudo "${IG}" image import "${GADGET_ARCHIVE}"

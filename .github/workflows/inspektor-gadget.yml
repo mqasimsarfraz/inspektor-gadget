@@ -1879,7 +1879,7 @@ jobs:
   test-integration-k8s-ig:
     name: Test ig w/ k8s
     # level: 3
-    needs: [ test-unit, build-ig, build-helper-images ]
+    needs: [ test-unit, build-ig, build-helper-images, build-and-push-gadgets ]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -1909,16 +1909,33 @@ jobs:
         run: |
           tar zxvf /home/runner/work/inspektor-gadget/ig-linux-amd64.tar.gz
           mv ig ig-linux-amd64
+      - name: Download gadget images
+        id: gadget-images
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/download-gadget-images
+        with:
+          ig: ./ig-linux-amd64
       - name: Setup minikube
         uses: ./.github/actions/setup-minikube
         with:
           runtime: ${{ matrix.runtime }}
+      - name: Import gadget images into minikube
+        if: github.event_name == 'pull_request'
+        env:
+          GADGET_ARCHIVE: ${{ steps.gadget-images.outputs.archive-path }}
+          MINIKUBE_PROFILE: minikube-${{ matrix.runtime }}
+        run: |
+          minikube -p "${MINIKUBE_PROFILE}" cp ./ig-linux-amd64 /tmp/ig
+          minikube -p "${MINIKUBE_PROFILE}" cp "${GADGET_ARCHIVE}" /tmp/gadgets.tar
+          minikube -p "${MINIKUBE_PROFILE}" ssh \
+            "sudo chmod +x /tmp/ig && sudo /tmp/ig image import /tmp/gadgets.tar"
       - name: Run integration for container runtime ${{ matrix.runtime }}
         id: integration-tests
         env:
           DNSTESTER_IMAGE: ${{ needs.build-helper-images.outputs.dnstester_image }}
           GADGET_REPOSITORY: ${{ steps.set-repo-determine-image-tag.outputs.gadget-repository }}
           GADGET_TAG: ${{ steps.set-repo-determine-image-tag.outputs.gadget-tag }}
+          IG_VERIFY_IMAGE: ${{ github.event_name != 'pull_request' }}
         run: |
           set -o pipefail
           make -C integration/k8s \
@@ -1934,7 +1951,7 @@ jobs:
           test-summary-suffix: ${{ matrix.runtime }}
 
   build-and-push-gadgets:
-    name: Build and push gadgets
+    name: Build and distribute gadgets
     # level: 2
     needs:
       - build-ig
@@ -1951,6 +1968,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Login to Container Registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
@@ -1985,7 +2003,6 @@ jobs:
           BUILDER_IMAGE: ${{ needs.build-helper-images.outputs.gadget_builder_image }}
           GADGET_REPOSITORY: ${{ steps.set-repo-determine-image-tag.outputs.gadget-repository }}
           GADGET_TAG: ${{ steps.set-repo-determine-image-tag.outputs.gadget-tag }}
-          GADGET_PUSH_RETRIES: 5
           CFLAGS: "-Werror"
         run: |
           make build-gadgets -o install/ig -j$(nproc)
@@ -1993,10 +2010,35 @@ jobs:
           # Check that metadata files are updated
           git diff --exit-code HEAD --
 
-          # Avoid building the gadgets again
+      - name: Push gadgets
+        if: github.event_name != 'pull_request'
+        env:
+          GADGET_REPOSITORY: ${{ steps.set-repo-determine-image-tag.outputs.gadget-repository }}
+          GADGET_TAG: ${{ steps.set-repo-determine-image-tag.outputs.gadget-tag }}
+          GADGET_PUSH_RETRIES: 5
+        run: |
           make -C gadgets/ push-existing
+      - name: Export gadget images
+        if: github.event_name == 'pull_request'
+        env:
+          GADGET_REPOSITORY: ${{ steps.set-repo-determine-image-tag.outputs.gadget-repository }}
+          GADGET_TAG: ${{ steps.set-repo-determine-image-tag.outputs.gadget-tag }}
+        run: |
+          mapfile -t gadgets < <(make -s -C gadgets/ list-gadgets)
+          images=()
+          for gadget in "${gadgets[@]}"; do
+            images+=("${GADGET_REPOSITORY}/${gadget}:${GADGET_TAG}")
+          done
+          sudo ig image export "${images[@]}" "${RUNNER_TEMP}/gadgets.tar"
+      - name: Upload gadget images
+        if: github.event_name == 'pull_request'
+        uses: mqasimsarfraz/oci-artifact-action@dc3499eb3fc4d26b26e70500be982c7aec15d813 # v1.0.0
+        with:
+          operation: upload
+          path: ${{ runner.temp }}/gadgets.tar
+          correlation-id: gadgets-${{ github.sha }}
       - name: Sign the gadgets
-        if: needs.check-secrets.outputs.cosign == 'true'
+        if: github.event_name != 'pull_request' && needs.check-secrets.outputs.cosign == 'true'
         env:
           COSIGN_PASSWORD: '${{ secrets.COSIGN_PASSWORD }}'
           COSIGN_PRIVATE_KEY: '${{ secrets.COSIGN_PRIVATE_KEY }}'
@@ -2031,13 +2073,27 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: ${{ env.IS_RELEASE == 'false' }} # zizmor: ignore[cache-poisoning]
         id: go
+      - name: Get ig-linux-amd64.tar.gz from artifact.
+        if: github.event_name == 'pull_request'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ig-linux-amd64-tar-gz
+          path: /home/runner/work/inspektor-gadget/
+      - name: Unpack ig-linux-amd64.tar.gz
+        if: github.event_name == 'pull_request'
+        run: |
+          tar zxvf /home/runner/work/inspektor-gadget/ig-linux-amd64.tar.gz
+          sudo mv ig /usr/bin/ig
+      - name: Download gadget images
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/download-gadget-images
       - name: Gadgets tests
         id: gadgets-tests
         shell: bash
         env:
           GADGET_REPOSITORY: ${{ steps.set-repo-determine-image-tag.outputs.gadget-repository }}
           GADGET_TAG: ${{ steps.set-repo-determine-image-tag.outputs.gadget-tag }}
-          IG_VERIFY_IMAGE: ${{ needs.check-secrets.outputs.cosign }}
+          IG_VERIFY_IMAGE: ${{ github.event_name != 'pull_request' && needs.check-secrets.outputs.cosign == 'true' }}
         run: |
             set -o pipefail
             make -C gadgets/ test-unit -o build |& tee gadgets-tests.log & wait $!
@@ -2095,6 +2151,9 @@ jobs:
       run: |
         tar zxvf /home/runner/work/inspektor-gadget/ig-linux-amd64.tar.gz
         sudo mv ig /usr/bin/ig
+    - name: Download gadget images
+      if: github.event_name == 'pull_request'
+      uses: ./.github/actions/download-gadget-images
     - name: Set up QEMU
       run: |
         sudo apt-get update
@@ -2115,7 +2174,9 @@ jobs:
       run: |
         set -o pipefail
         export VIMTO=$(go env GOPATH)/bin/vimto
-        make -C gadgets/ pull
+        if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ]]; then
+          make -C gadgets/ pull
+        fi
         make -C gadgets/ test-unit -o build |& tee gadgets-kernel-tests.log & wait $!
     - name: Prepare and publish test reports
       if: always()
@@ -2159,6 +2220,9 @@ jobs:
       run: |
         tar zxvf /home/runner/work/inspektor-gadget/ig-linux-amd64.tar.gz
         sudo mv ig /usr/bin/ig
+    - name: Download gadget images
+      if: github.event_name == 'pull_request'
+      uses: ./.github/actions/download-gadget-images
     - name: Get gadgetctl-linux-amd64.tar.gz from artifact.
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
@@ -2190,13 +2254,15 @@ jobs:
       env:
         GADGET_REPOSITORY: ${{ steps.set-repo-determine-image-tag.outputs.gadget-repository }}
         GADGET_TAG: ${{ steps.set-repo-determine-image-tag.outputs.gadget-tag }}
-        VERIFY_IMAGE: ${{ needs.check-secrets.outputs.cosign }}
+        VERIFY_IMAGE: ${{ github.event_name != 'pull_request' && needs.check-secrets.outputs.cosign == 'true' }}
         DNSTESTER_IMAGE: ${{ needs.build-helper-images.outputs.dnstester_image }}
       run: |
           set -o pipefail
-          # Pull the gadget images before the tests rather than during them
-          # to avoid requiring long timeouts in tests due to slow OCI registries.
-          make -C gadgets/ pull
+          if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ]]; then
+            # Pull the gadget images before the tests rather than during them
+            # to avoid requiring long timeouts in tests due to slow OCI registries.
+            make -C gadgets/ pull
+          fi
           make \
           IG_FLAGS="--verify-image=$VERIFY_IMAGE" \
           IG_RUNTIME=${{ matrix.runtime }} \
@@ -2622,6 +2688,20 @@ jobs:
       with:
         runtime: ${{ matrix.runtime }}
         multi-node: true
+    - name: Get ig-linux-amd64.tar.gz from artifact.
+      if: github.event_name == 'pull_request'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: ig-linux-amd64-tar-gz
+        path: /home/runner/work/inspektor-gadget/
+    - name: Unpack ig-linux-amd64.tar.gz
+      if: github.event_name == 'pull_request'
+      run: |
+        tar zxvf /home/runner/work/inspektor-gadget/ig-linux-amd64.tar.gz
+        sudo mv ig /usr/bin/ig
+    - name: Download gadget images
+      if: github.event_name == 'pull_request'
+      uses: ./.github/actions/download-gadget-images
     - name: Get gadget-container-image-linux-amd64.tar from artifact.
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
@@ -2633,6 +2713,39 @@ jobs:
       with:
         registry: ${{ env.REGISTRY }}
         container-image: ${{ env.CONTAINER_REPO }}
+    - name: Publish gadget images to the minikube registry
+      id: minikube-gadgets
+      if: github.event_name == 'pull_request'
+      env:
+        SOURCE_GADGET_REPOSITORY: ${{ steps.set-repo-determine-image-tag.outputs.gadget-repository }}
+        GADGET_TAG: ${{ steps.set-repo-determine-image-tag.outputs.gadget-tag }}
+      run: |
+        make -C gadgets/ minikube-registry-enable
+        registry="$(minikube ip):5000"
+        for _ in {1..30}; do
+          if curl --fail --silent "http://${registry}/v2/" > /dev/null; then
+            break
+          fi
+          sleep 2
+        done
+        curl --fail --silent "http://${registry}/v2/" > /dev/null
+
+        mapfile -t gadgets < <(make -s -C gadgets/ list-gadgets)
+        for gadget in "${gadgets[@]}"; do
+          source="${SOURCE_GADGET_REPOSITORY}/${gadget}:${GADGET_TAG}"
+          destination="${registry}/${gadget}:${GADGET_TAG}"
+          sudo ig image tag "${source}" "${destination}"
+          for attempt in {1..5}; do
+            if sudo ig image push "${destination}" --insecure-registries "${registry}"; then
+              break
+            fi
+            if [[ "${attempt}" == 5 ]]; then
+              exit 1
+            fi
+            sleep $((attempt * 2))
+          done
+        done
+        echo "repository=${registry}" >> "${GITHUB_OUTPUT}"
     - name: Prepare minikube by loading gadget-container-image-linux-amd64.tar
       env:
         CONTAINER_REPO: ${{ steps.set-repo-determine-image-tag.outputs.container-repo }}
@@ -2649,9 +2762,10 @@ jobs:
         container_repo: ${{ steps.set-repo-determine-image-tag.outputs.container-repo }}
         image_tag: ${{ steps.set-repo-determine-image-tag.outputs.image-tag }}
         dnstester_image: ${{ needs.build-helper-images.outputs.dnstester_image }}
-        gadget_repository: ${{ steps.set-repo-determine-image-tag.outputs.gadget-repository }}
+        gadget_repository: ${{ steps.minikube-gadgets.outputs.repository || steps.set-repo-determine-image-tag.outputs.gadget-repository }}
         gadget_tag: ${{ steps.set-repo-determine-image-tag.outputs.gadget-tag }}
-        gadget_verify_image: ${{ needs.check-secrets.outputs.cosign }}
+        gadget_verify_image: ${{ github.event_name != 'pull_request' && needs.check-secrets.outputs.cosign == 'true' }}
+        gadget_insecure_registry: ${{ steps.minikube-gadgets.outputs.repository }}
         test_summary_suffix: ${{ matrix.runtime }}
 
   publish-test-reports:
