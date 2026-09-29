@@ -22,6 +22,8 @@ Inspektor Gadget is a set of tools and framework for data collection and system 
 
 **Note**: Major new functionality was released in v0.31.0. Please read the [blog post for a detailed overview](https://inspektor-gadget.io/blog/2024/08/empowering-observability_the_advent_of_image_based_gadgets).
 
+barbaz
+
 ## Features
 
 * Build and package eBPF programs into OCI images called Gadgets
