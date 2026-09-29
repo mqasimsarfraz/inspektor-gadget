@@ -26,6 +26,9 @@ inputs:
   gadget_verify_image:
     description: 'Whether to verify the gadget image.'
     default: 'true'
+  gadget_insecure_registry:
+    description: 'HTTP registry endpoint allowed for gadget images.'
+    required: false
   test_summary_suffix:
     description: 'Suffix of the test summary file'
     required: true
@@ -44,15 +47,20 @@ runs:
       env:
         KUBERNETES_DISTRIBUTION: ${{ inputs.kubernetes_distribution }}
         GADGET_VERIFY_IMAGE: ${{ inputs.gadget_verify_image }}
+        GADGET_INSECURE_REGISTRY: ${{ inputs.gadget_insecure_registry }}
         CONTAINER_REPO: ${{ inputs.container_repo }}
         IMAGE_TAG: ${{ inputs.image_tag }}
       run: |
         tar zxvf /home/runner/work/inspektor-gadget/inspektor-gadget/kubectl-gadget-linux-amd64.tar.gz
+        extra_flags=()
         if [[ "${KUBERNETES_DISTRIBUTION}" == "minikube-github" ]]; then
           # Inspektor-Gadget container image is loaded into the cluster using "minikube image load" instead of pushing the container image to a registry.
-          EXTRA_FLAGS='--image-pull-policy=Never'
+          extra_flags+=(--image-pull-policy=Never)
         fi
-        ./kubectl-gadget deploy --set-daemon-config=operator.oci.verify-image="${GADGET_VERIFY_IMAGE}" $EXTRA_FLAGS --debug --experimental --image="${CONTAINER_REPO}:${IMAGE_TAG}"
+        if [[ -n "${GADGET_INSECURE_REGISTRY}" ]]; then
+          extra_flags+=(--set-daemon-config=operator.oci.insecure-registries="${GADGET_INSECURE_REGISTRY}")
+        fi
+        ./kubectl-gadget deploy --set-daemon-config=operator.oci.verify-image="${GADGET_VERIFY_IMAGE}" "${extra_flags[@]}" --debug --experimental --image="${CONTAINER_REPO}:${IMAGE_TAG}"
     - name: Integration tests
       id: integration-tests
       shell: bash
@@ -62,6 +70,7 @@ runs:
         DNSTESTER_IMAGE: ${{ inputs.dnstester_image }}
         GADGET_REPOSITORY: ${{ inputs.gadget_repository }}
         GADGET_TAG: ${{ inputs.gadget_tag }}
+        GADGET_INSECURE_REGISTRY: ${{ inputs.gadget_insecure_registry }}
       run: |
         cleanup() {
             echo "IntegrationTestsJob: Workflow run is being cancelled: $1 was received"

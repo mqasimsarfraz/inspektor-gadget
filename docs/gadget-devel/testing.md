@@ -14,6 +14,42 @@ to learn how they implement the tests.
 
 Inspektor Gadget provides a set of helpers to implement tests for your gadget. This document is a small guide showing how to implement tests for the [hello-world gadget](./hello-world-gadget.mdx).
 
+## Gadget images in CI
+
+Pull request jobs build the gadgets once and export the complete gadget set,
+including the CI-only gadgets, into a single `gadgets.tar` OCI archive. The
+`gadget-images` GitHub Actions artifact shares this archive with the test jobs;
+PR gadget images are not pushed to a public registry.
+
+The gadget unit, kernel, and local integration jobs import the archive into the
+local image store before running tests. To export or import images locally:
+
+```bash
+make -C gadgets export GADGET_ARCHIVE=/tmp/gadgets.tar
+sudo ig image import /tmp/gadgets.tar
+```
+
+The export target uses the same `GADGETS`, `GADGET_REPOSITORY`, and `GADGET_TAG`
+settings as the build. It only exports existing images and does not rebuild them.
+
+For Kubernetes gadget tests, the `setup-minikube` composite action imports the
+archive on the runner, retags and pushes the images to the minikube registry, and
+returns the repository and HTTP registry endpoint. The daemon is configured to
+allow that endpoint, including when the multi-tenancy test redeploys it. PR
+gadgets are unsigned, so these tests disable gadget image verification. Non-PR
+jobs continue to publish to GHCR and verify signed images when signing is enabled.
+
+The gadget-container and ig container images use the same official GitHub
+artifact actions but remain separate, per-platform Docker archives, not part of
+`gadgets.tar`. The minikube action can also load the gadget-container archive on
+the nodes for integration and Helm tests without requiring a public registry.
+Standalone container-listing tests do not need the gadget archive.
+
+Image artifacts are retained for one day. Rerunning test jobs after the artifacts
+expire requires rerunning the image build jobs as well.
+
+## Writing a gadget test
+
 First, create the testing file, `mygadget_test.go` and import some packages, like:
 
 ```go

@@ -16,6 +16,11 @@ phony_explicit:
 # minikube
 
 MINIKUBE = $(MINIKUBE_DIR)/minikube-$(MINIKUBE_VERSION)
+
+.PHONY: minikube-path
+minikube-path:
+	@printf '%s\n' "$(MINIKUBE)"
+
 .PHONY: minikube-install
 minikube-install:
 	mkdir -p $(MINIKUBE_DIR)
@@ -49,4 +54,3 @@ minikube-start-%: minikube-install
 	$(MINIKUBE) status -p minikube-$* -f {{.APIServer}} >/dev/null || \
 	$(MINIKUBE) start -p minikube-$* --driver=$(MINIKUBE_DRIVER) --kubernetes-version=$(KUBERNETES_VERSION) --container-runtime=$* --wait=all $${MINIKUBE_PARAMS}
 	$(MINIKUBE) profile minikube-$*
-

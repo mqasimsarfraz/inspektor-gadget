@@ -9,17 +9,116 @@ inputs:
     description: "Whether to run minikube with multiple nodes."
     required: false
     default: false
+  gadget-images:
+    description: "Download the gadget-images artifact and publish it to the minikube registry."
+    default: 'false'
+  ig:
+    description: "Path to the ig binary used to import and push gadget images."
+    default: 'ig'
+  gadget-repository:
+    description: "Source repository of the gadget images in the archive."
+    required: false
+  gadget-tag:
+    description: "Tag of the gadget images in the archive."
+    required: false
+  container-image-artifact:
+    description: "Optional Docker tar artifact to load on every minikube node; the filename must match the artifact name."
+    required: false
+  container-image:
+    description: "Tagged container image reference to load from the Docker archive."
+    required: false
+
+outputs:
+  gadget-repository:
+    description: "Minikube registry repository, when gadget provisioning is enabled."
+    value: ${{ steps.gadgets.outputs.registry }}
+  gadget-insecure-registry:
+    description: "HTTP registry endpoint to allow when pulling the provisioned gadgets."
+    value: ${{ steps.gadgets.outputs.registry }}
 
 runs:
   using: "composite"
   steps:
     - name: Start minikube
+      id: minikube
       shell: bash
       run: |
         make minikube-start-"${RUNTIME}"
+        echo "executable=$(make -s minikube-path)" >> "${GITHUB_OUTPUT}"
       env:
         RUNTIME: ${{ inputs.runtime }}
         # When using multi-node, run the integration tests on two nodes.
         # As GitHub Runner has only 2 CPU and 7 GB of DRAM, we cannot use a big
         # number here
         MINIKUBE_PARAMS: ${{ inputs.multi-node == 'true' && '-n 2' || '' }}
+    - name: Download gadget images
+      if: inputs.gadget-images == 'true'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: gadget-images
+        path: ${{ runner.temp }}/gadget-images
+    - name: Publish gadgets to the minikube registry
+      id: gadgets
+      if: inputs.gadget-images == 'true'
+      shell: bash
+      env:
+        MINIKUBE: ${{ steps.minikube.outputs.executable }}
+        MINIKUBE_PROFILE: minikube-${{ inputs.runtime }}
+        IG: ${{ inputs.ig }}
+        GADGET_REPOSITORY: ${{ inputs.gadget-repository }}
+        GADGET_TAG: ${{ inputs.gadget-tag }}
+        GADGET_ARCHIVE: ${{ runner.temp }}/gadget-images/gadgets.tar
+      run: |
+        : "${GADGET_REPOSITORY:?gadget-repository is required}"
+        : "${GADGET_TAG:?gadget-tag is required}"
+        sudo "${IG}" image import "${GADGET_ARCHIVE}"
+        "${MINIKUBE}" -p "${MINIKUBE_PROFILE}" addons enable registry
+        registry="$("${MINIKUBE}" -p "${MINIKUBE_PROFILE}" ip):5000"
+        for attempt in {1..30}; do
+          if curl --fail --silent --show-error --max-time 5 "http://${registry}/v2/" > /dev/null; then
+            break
+          fi
+          if [[ "${attempt}" == 30 ]]; then
+            echo "Minikube registry ${registry} did not become ready" >&2
+            exit 1
+          fi
+          sleep 2
+        done
+
+        gadgets="$(make -s -C gadgets/ list-gadgets)"
+        : "${gadgets:?No gadget images to push}"
+        while IFS= read -r gadget; do
+          source="${GADGET_REPOSITORY}/${gadget}:${GADGET_TAG}"
+          destination="${registry}/${gadget}:${GADGET_TAG}"
+          sudo "${IG}" image tag "${source}" "${destination}"
+          for attempt in {1..5}; do
+            if sudo "${IG}" image push "${destination}" --insecure-registries "${registry}"; then
+              break
+            fi
+            if [[ "${attempt}" == 5 ]]; then
+              echo "Failed to push ${destination}" >&2
+              exit 1
+            fi
+            sleep $((attempt * 2))
+          done
+        done <<< "${gadgets}"
+        echo "registry=${registry}" >> "${GITHUB_OUTPUT}"
+    - name: Download container image
+      if: inputs.container-image-artifact != ''
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: ${{ inputs.container-image-artifact }}
+        path: ${{ runner.temp }}/minikube-container-image
+    - name: Load container image on minikube nodes
+      if: inputs.container-image-artifact != ''
+      shell: bash
+      env:
+        MINIKUBE: ${{ steps.minikube.outputs.executable }}
+        MINIKUBE_PROFILE: minikube-${{ inputs.runtime }}
+        CONTAINER_ARCHIVE: ${{ runner.temp }}/minikube-container-image/${{ inputs.container-image-artifact }}
+        CONTAINER_IMAGE: ${{ inputs.container-image }}
+      run: |
+        : "${CONTAINER_IMAGE:?container-image is required}"
+        # Load by tagged reference: some runtimes lose image names when loading an archive directly.
+        docker load -i "${CONTAINER_ARCHIVE}"
+        "${MINIKUBE}" -p "${MINIKUBE_PROFILE}" image load "${CONTAINER_IMAGE}"
