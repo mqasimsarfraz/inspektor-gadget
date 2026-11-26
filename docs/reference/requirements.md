@@ -14,6 +14,18 @@ where the Gadget is being loaded. Gadgets developed by the Inspektor Gadget
 project require at least Linux 5.10 with
 [BTF](https://www.kernel.org/doc/html/latest/bpf/btf.html) enabled.
 
+### IG-Shield
+
+[IG-Shield](../gadget-devel/ig-shield.md) additionally needs
+`BPF_PROG_TYPE_SYSCALL`, generated-loader helpers, BTF, and the kernel symbols
+and features used by the precompiled package. LSM patches require
+`CONFIG_BPF_LSM=y` and `bpf` in the active LSM list; fmod_ret patches require
+modifiable targets and BPF trampoline support. The general Linux 5.10 gadget
+minimum is not sufficient for this loader. Stock Ubuntu Linux
+6.8.0-149-generic has been tested, without Shirudo initialization; other
+kernels/configurations and package targets need separate validation.
+Only standalone local Linux `ig` is supported initially.
+
 ## Kubernetes Platform
 
 | Kubernetes platforms                                   | Support                                                                           |

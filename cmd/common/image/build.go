@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -47,9 +48,14 @@ const (
 )
 
 type buildFile struct {
-	EBPFSource string `yaml:"ebpfsource"`
-	Wasm       string `yaml:"wasm"`
-	Metadata   string `yaml:"metadata"`
+	EBPFSource string       `yaml:"ebpfsource"`
+	Wasm       string       `yaml:"wasm"`
+	Metadata   string       `yaml:"metadata"`
+	Shield     *shieldBuild `yaml:"shield"`
+}
+
+type shieldBuild struct {
+	Package string `yaml:"package"`
 }
 
 type cmdOpts struct {
@@ -269,6 +275,16 @@ func runBuild(cmd *cobra.Command, opts *cmdOpts) error {
 	if err := yaml.Unmarshal(buildContent, conf); err != nil {
 		return fmt.Errorf("unmarshaling build.yaml: %w", err)
 	}
+	shieldPackage := ""
+	if conf.Shield != nil {
+		shieldPackage = conf.Shield.Package
+		if shieldPackage == "" {
+			return fmt.Errorf("shield.package must name a built .bee archive")
+		}
+		if conf.EBPFSource != "" && conf.EBPFSource != DEFAULT_EBPF_SOURCE || conf.Wasm != "" || opts.btfgen || opts.updateMetadata {
+			return fmt.Errorf("shield builds cannot use eBPF/WASM sources, btfgen or metadata generation")
+		}
+	}
 
 	if opts.outputDir != "" {
 		if _, err := os.Stat(opts.outputDir); err != nil {
@@ -313,6 +329,7 @@ func runBuild(cmd *cobra.Command, opts *cmdOpts) error {
 		{"ebpfsource", conf.EBPFSource},
 		{"wasm", conf.Wasm},
 		{"metadata", conf.Metadata},
+		{"shield.package", shieldPackage},
 	} {
 		if f.path == "" {
 			continue
@@ -322,7 +339,17 @@ func runBuild(cmd *cobra.Command, opts *cmdOpts) error {
 		}
 	}
 
-	if _, err := os.Stat(conf.EBPFSource); errors.Is(err, os.ErrNotExist) {
+	if conf.Shield != nil {
+		if conf.EBPFSource == DEFAULT_EBPF_SOURCE {
+			if _, err := os.Stat(conf.EBPFSource); err == nil {
+				return fmt.Errorf("shield builds cannot also include program.bpf.c; set ebpfsource to an empty string or remove the source")
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("checking eBPF source: %w", err)
+			}
+		}
+		conf.EBPFSource = ""
+	}
+	if _, err := os.Stat(conf.EBPFSource); conf.EBPFSource != "" && errors.Is(err, os.ErrNotExist) {
 		if conf.EBPFSource != DEFAULT_EBPF_SOURCE {
 			return fmt.Errorf("source file %q not found", conf.EBPFSource)
 		}
@@ -397,10 +424,17 @@ func runBuild(cmd *cobra.Command, opts *cmdOpts) error {
 
 	// TODO: make this configurable?
 	archs := []string{oci.ArchAmd64, oci.ArchArm64}
+	if conf.Shield != nil {
+		if runtime.GOARCH != oci.ArchAmd64 && runtime.GOARCH != oci.ArchArm64 {
+			return fmt.Errorf("unsupported shield build architecture %q", runtime.GOARCH)
+		}
+		archs = []string{runtime.GOARCH}
+	}
 	objectsPaths := map[string]*oci.ObjectPath{}
 
 	for _, arch := range archs {
 		obj := &oci.ObjectPath{}
+		obj.Shield = shieldPackage
 
 		if conf.EBPFSource != "" {
 			obj.EBPF = filepath.Join(opts.outputDir, arch+".bpf.o")

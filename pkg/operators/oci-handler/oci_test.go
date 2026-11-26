@@ -28,7 +28,17 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/shield"
 )
+
+func TestValidateShieldManifest(t *testing.T) {
+	packageLayer := v1.Descriptor{MediaType: shield.MediaType}
+	require.NoError(t, validateShieldManifest(&v1.Manifest{Layers: []v1.Descriptor{packageLayer}}, true))
+	require.ErrorContains(t, validateShieldManifest(&v1.Manifest{Layers: []v1.Descriptor{packageLayer}}, false), "successful image verification")
+	require.ErrorContains(t, validateShieldManifest(&v1.Manifest{Layers: []v1.Descriptor{packageLayer, {MediaType: "application/vnd.gadget.ebpf.program.v1+binary"}}}, true), "exactly one")
+	require.NoError(t, validateShieldManifest(&v1.Manifest{Layers: []v1.Descriptor{{MediaType: "application/vnd.gadget.ebpf.program.v1+binary"}}}, false))
+}
 
 func TestCheckBuilderVersion(t *testing.T) {
 	var logBuffer bytes.Buffer

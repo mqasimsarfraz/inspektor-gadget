@@ -57,6 +57,8 @@ The building process is controlled by the `build.yaml` file. The following param
     - `*.go`: automatically built
     - `*.rs`: automatically built with cargo, using the `Cargo.toml` in the parent directory
 - `cflags`: The C flags used to compile the eBPF program. It is unset by default.
+- `shield.package`: A built `.bee` mitigation package, mutually exclusive with
+  eBPF/WASM sources and metadata generation. See [IG-Shield](ig-shield.md).
 
 By default, the build command looks for `build.yaml` in PATH. It can be changed with the `--file` flag:
 

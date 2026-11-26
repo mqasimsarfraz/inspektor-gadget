@@ -1,0 +1,2 @@
+name: ig-shield-probe
+description: Disposable-VM-only socket_create and getpgid mitigation fixture

@@ -993,6 +993,30 @@ func GetManifestForHost(ctx context.Context, target oras.ReadOnlyTarget, image s
 	return getManifestForHost(ctx, target, image)
 }
 
+// ResolveImageReference pins subsequent verification and reads to one digest.
+func ResolveImageReference(ctx context.Context, target oras.ReadOnlyTarget, image string) (string, error) {
+	if target == nil {
+		var err error
+		target, err = newLocalOciStore()
+		if err != nil {
+			return "", fmt.Errorf("getting local oci store: %w", err)
+		}
+	}
+	ref, err := normalizeImageName(image)
+	if err != nil {
+		return "", fmt.Errorf("normalizing image: %w", err)
+	}
+	desc, err := target.Resolve(ctx, ref.String())
+	if err != nil {
+		return "", fmt.Errorf("resolving image: %w", err)
+	}
+	pinned, err := reference.WithDigest(reference.TrimNamed(ref), desc.Digest)
+	if err != nil {
+		return "", fmt.Errorf("pinning image reference: %w", err)
+	}
+	return pinned.String(), nil
+}
+
 // getIndex gets an index for the given image
 func getIndex(ctx context.Context, target oras.ReadOnlyTarget, image string) (*ocispec.Index, error) {
 	imageRef, err := normalizeImageName(image)

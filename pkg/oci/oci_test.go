@@ -18,6 +18,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -27,7 +30,70 @@ import (
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content/oci"
 	"oras.land/oras-go/v2/registry"
+
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/shield"
 )
+
+func TestShieldImageContents(t *testing.T) {
+	ctx := context.Background()
+	store, err := oci.New(t.TempDir())
+	require.NoError(t, err)
+	metadata := filepath.Join(t.TempDir(), "gadget.yaml")
+	require.NoError(t, os.WriteFile(metadata, []byte("name: mitigation\n"), 0o600))
+	opts := &BuildGadgetImageOpts{
+		MetadataPath: metadata, CreatedDate: "2026-01-01T00:00:00Z",
+		ObjectPaths: map[string]*ObjectPath{runtime.GOARCH: {Shield: "../shield/testdata/mitigation.bee"}},
+	}
+	desc, err := createImageIndex(ctx, store, opts)
+	require.NoError(t, err)
+	again, err := createImageIndex(ctx, store, opts)
+	require.NoError(t, err)
+	require.Equal(t, desc.Digest, again.Digest)
+	_, indexBytes, err := oras.FetchBytes(ctx, store, desc.Digest.String(), oras.DefaultFetchBytesOptions)
+	require.NoError(t, err)
+	var index ocispec.Index
+	require.NoError(t, json.Unmarshal(indexBytes, &index))
+	require.Len(t, index.Manifests, 1)
+	require.Equal(t, runtime.GOARCH, index.Manifests[0].Platform.Architecture)
+	manifestReader, err := store.Fetch(ctx, index.Manifests[0])
+	require.NoError(t, err)
+	var manifest ocispec.Manifest
+	require.NoError(t, json.NewDecoder(manifestReader).Decode(&manifest))
+	require.NoError(t, manifestReader.Close())
+	require.Len(t, manifest.Layers, 1)
+	require.Equal(t, shield.MediaType, manifest.Layers[0].MediaType)
+	_, content, err := oras.FetchBytes(ctx, store, manifest.Layers[0].Digest.String(), oras.DefaultFetchBytesOptions)
+	require.NoError(t, err)
+	original, err := os.ReadFile(opts.ObjectPaths[runtime.GOARCH].Shield)
+	require.NoError(t, err)
+	require.Equal(t, original, content)
+}
+
+func TestShieldBuildRejectsMixedPayloads(t *testing.T) {
+	_, err := buildGadgetImage(context.Background(), &BuildGadgetImageOpts{
+		ObjectPaths: map[string]*ObjectPath{ArchAmd64: {Shield: "package.bee", EBPF: "program.o"}},
+	}, "")
+	require.ErrorContains(t, err, "cannot be mixed")
+}
+
+func TestResolvePinnedImage(t *testing.T) {
+	ctx := context.Background()
+	store, err := newLocalOciStoreAt(t.TempDir())
+	require.NoError(t, err)
+	desc := pushBlob(t, ctx, store.Store, ocispec.MediaTypeImageIndex, []byte(`{"schemaVersion":2,"manifests":[]}`))
+	require.NoError(t, store.Tag(ctx, desc, "example.com/shield:latest"))
+	pinned, err := ResolveImageReference(ctx, store, "example.com/shield:latest")
+	require.NoError(t, err)
+	require.Equal(t, "example.com/shield@"+desc.Digest.String(), pinned)
+	resolved, err := store.Resolve(ctx, pinned)
+	require.NoError(t, err)
+	require.Equal(t, desc.Digest, resolved.Digest)
+	replacement := pushBlob(t, ctx, store.Store, ocispec.MediaTypeImageIndex, []byte(`{"schemaVersion":2,"manifests":[],"annotations":{"changed":"true"}}`))
+	require.NoError(t, store.Tag(ctx, replacement, "example.com/shield:latest"))
+	resolved, err = store.Resolve(ctx, pinned)
+	require.NoError(t, err)
+	require.Equal(t, desc.Digest, resolved.Digest, "retagging must not change the verified content")
+}
 
 func TestExtendedCopyPreservesReferrers(t *testing.T) {
 	t.Parallel()

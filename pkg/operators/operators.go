@@ -55,7 +55,16 @@ const (
 	MapPrefix string = "map/"
 
 	MapSpecPrefix string = "mapspec/"
+
+	VerifiedImageVar = "oci.verified-image"
 )
+
+// VerifiedImage records actual OCI verification, not user-supplied metadata.
+// Trusted in-process callers are responsible for producing this provenance.
+type VerifiedImage struct {
+	Reference string
+	Layers    []ocispec.Descriptor
+}
 
 type ImageOperator interface {
 	Name() string

@@ -1,0 +1,4 @@
+ebpfsource: ""
+metadata: gadget.yaml
+shield:
+  package: mitigation.bee

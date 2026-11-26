@@ -39,6 +39,7 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/resources"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/shield"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/signature/verifier"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/signature/verifier/cosign"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/signature/verifier/notation"
@@ -398,6 +399,8 @@ func (o *OciHandlerInstance) init(gadgetCtx operators.GadgetContext) error {
 	gadgetCtx.Logger().Debugf("image options: %+v", imgOpts)
 
 	target := gadgetCtx.OrasTarget()
+	imageReference := gadgetCtx.ImageName()
+	verified := false
 	// If the target wasn't explicitly set, use the local store. In this case we
 	// need to be sure the image is available.
 	if target == nil {
@@ -409,15 +412,29 @@ func (o *OciHandlerInstance) init(gadgetCtx operators.GadgetContext) error {
 			return fmt.Errorf("ensuring image: %w", err)
 		}
 
-		err = oci.VerifyGadgetImage(gadgetCtx.Context(), gadgetCtx.ImageName(), imgOpts)
+		imageReference, err = oci.ResolveImageReference(gadgetCtx.Context(), target, imageReference)
+		if err != nil {
+			return fmt.Errorf("resolving immutable image: %w", err)
+		}
+		err = oci.VerifyGadgetImage(gadgetCtx.Context(), imageReference, imgOpts)
 		if err != nil {
 			return fmt.Errorf("verifying image: %w", err)
 		}
+		verified = imgOpts.VerifySignature && imgOpts.Verifier != nil
 	}
 
-	manifest, err := oci.GetManifestForHost(gadgetCtx.Context(), target, gadgetCtx.ImageName())
+	manifest, err := oci.GetManifestForHost(gadgetCtx.Context(), target, imageReference)
 	if err != nil {
 		return fmt.Errorf("getting manifest: %w", err)
+	}
+	if err := validateShieldManifest(manifest, verified); err != nil {
+		return err
+	}
+	gadgetCtx.SetVar(operators.VerifiedImageVar, nil)
+	if verified {
+		gadgetCtx.SetVar(operators.VerifiedImageVar, &operators.VerifiedImage{
+			Reference: imageReference, Layers: slices.Clone(manifest.Layers),
+		})
 	}
 
 	log := gadgetCtx.Logger()
@@ -433,6 +450,12 @@ func (o *OciHandlerInstance) init(gadgetCtx operators.GadgetContext) error {
 		return fmt.Errorf("reading metadata: %w", err)
 	}
 	r.Close()
+
+	if len(manifest.Layers) == 1 && manifest.Layers[0].MediaType == shield.MediaType {
+		if err := shield.ValidateMetadata(metadata); err != nil {
+			return err
+		}
+	}
 
 	// Store metadata
 	err = gadgetCtx.SetMetadata(metadata)
@@ -514,6 +537,21 @@ func (o *OciHandlerInstance) init(gadgetCtx operators.GadgetContext) error {
 	}
 
 	o.extraParams = extraParams
+	return nil
+}
+
+func validateShieldManifest(manifest *v1.Manifest, verified bool) error {
+	for _, layer := range manifest.Layers {
+		if layer.MediaType != shield.MediaType {
+			continue
+		}
+		if !verified {
+			return fmt.Errorf("IG-Shield requires successful image verification; disabled verification and unverified custom ORAS targets are not supported")
+		}
+		if len(manifest.Layers) != 1 {
+			return fmt.Errorf("IG-Shield requires exactly one package layer and cannot be mixed with other executable layers")
+		}
+	}
 	return nil
 }
 

@@ -35,6 +35,7 @@ import (
 
 	"github.com/inspektor-gadget/inspektor-gadget/internal/version"
 	metadatav1 "github.com/inspektor-gadget/inspektor-gadget/pkg/metadata/v1"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/shield"
 )
 
 const (
@@ -62,6 +63,8 @@ type ObjectPath struct {
 	Wasm string
 	// Optional path to tarball containing BTF files generated with btfgen
 	Btfgen string
+	// Path to a built .bee package, mutually exclusive with the other payloads.
+	Shield string
 }
 
 type BuildGadgetImageOpts struct {
@@ -95,6 +98,21 @@ func BuildGadgetImage(ctx context.Context, opts *BuildGadgetImageOpts, image str
 }
 
 func buildGadgetImage(ctx context.Context, opts *BuildGadgetImageOpts, image string) (*GadgetImageDesc, error) {
+	for _, paths := range opts.ObjectPaths {
+		if paths.Shield == "" {
+			continue
+		}
+		if len(opts.ObjectPaths) != 1 || paths.EBPF != "" || paths.Wasm != "" || paths.Btfgen != "" || opts.EBPFSourcePath != "" || opts.UpdateMetadata {
+			return nil, fmt.Errorf("shield packages cannot be mixed with other payloads or metadata generation")
+		}
+		metadata, err := os.ReadFile(opts.MetadataPath)
+		if err != nil {
+			return nil, fmt.Errorf("reading required shield metadata: %w", err)
+		}
+		if err := shield.ValidateMetadata(metadata); err != nil {
+			return nil, err
+		}
+	}
 	ociStore, err := newLocalOciStore()
 	if err != nil {
 		return nil, fmt.Errorf("getting oci store: %w", err)
@@ -160,7 +178,7 @@ func pushDescriptorIfNotExists(ctx context.Context, target oras.Target, desc oci
 func createLayerDesc(ctx context.Context, target oras.Target, progFilePath, mediaType string) (ocispec.Descriptor, error) {
 	progBytes, err := os.ReadFile(progFilePath)
 	if err != nil {
-		return ocispec.Descriptor{}, fmt.Errorf("reading eBPF program file: %w", err)
+		return ocispec.Descriptor{}, fmt.Errorf("reading layer file: %w", err)
 	}
 	progDesc := content.NewDescriptorFromBytes(mediaType, progBytes)
 
@@ -224,6 +242,23 @@ func createEmptyDesc(ctx context.Context, target oras.Target) (ocispec.Descripto
 
 func createManifestForTarget(ctx context.Context, target oras.Target, metadataFilePath, arch string, paths *ObjectPath, createdDate string) (ocispec.Descriptor, error) {
 	layerDescs := []ocispec.Descriptor{}
+
+	if paths.Shield != "" {
+		f, err := os.Open(paths.Shield)
+		if err != nil {
+			return ocispec.Descriptor{}, fmt.Errorf("opening shield package: %w", err)
+		}
+		_, parseErr := shield.ReadPackage(f)
+		closeErr := f.Close()
+		if err := errors.Join(parseErr, closeErr); err != nil {
+			return ocispec.Descriptor{}, fmt.Errorf("validating shield package: %w", err)
+		}
+		desc, err := createLayerDesc(ctx, target, paths.Shield, shield.MediaType)
+		if err != nil {
+			return ocispec.Descriptor{}, err
+		}
+		layerDescs = append(layerDescs, desc)
+	}
 
 	if paths.EBPF != "" {
 		progDesc, err := createLayerDesc(ctx, target, paths.EBPF, eBPFObjectMediaType)
@@ -359,6 +394,9 @@ func createImageIndex(ctx context.Context, target oras.Target, o *BuildGadgetIma
 func fixGeneratedFilesOwner(opts *BuildGadgetImageOpts) error {
 	allPaths := []string{}
 	for _, paths := range opts.ObjectPaths {
+		if paths.Shield != "" {
+			continue
+		}
 		allPaths = append(allPaths, paths.EBPF, paths.Wasm, paths.Btfgen)
 	}
 

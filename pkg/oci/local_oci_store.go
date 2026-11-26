@@ -15,6 +15,7 @@
 package oci
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +25,7 @@ import (
 	"path/filepath"
 	"reflect"
 
+	"github.com/distribution/reference"
 	"github.com/gofrs/flock"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content/oci"
@@ -37,6 +39,17 @@ type localOciStore struct {
 	oldIndex   *ocispec.Index
 	indexFlock *flock.Flock
 	readOnly   bool
+}
+
+// Resolve treats repository-qualified digests as immutable content addresses,
+// not as tags that must have been explicitly saved in index.json.
+func (o *localOciStore) Resolve(ctx context.Context, ref string) (ocispec.Descriptor, error) {
+	if named, err := reference.ParseNormalizedNamed(ref); err == nil {
+		if canonical, ok := named.(reference.Canonical); ok {
+			return o.Store.Resolve(ctx, canonical.Digest().String())
+		}
+	}
+	return o.Store.Resolve(ctx, ref)
 }
 
 const userOciStoreSubDir = ".ig/oci-store"

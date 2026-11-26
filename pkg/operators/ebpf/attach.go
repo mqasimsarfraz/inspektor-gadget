@@ -28,6 +28,7 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils/cgroups"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/uprobetracer"
+	ebpfutils "github.com/inspektor-gadget/inspektor-gadget/pkg/utils/ebpf"
 )
 
 const (
@@ -207,9 +208,7 @@ func (i *ebpfInstance) attachProgram(gadgetCtx operators.GadgetContext, p *ebpf.
 		return nil, handler.AttachProg(prog)
 	case ebpf.LSM:
 		i.logger.Debugf("Attaching LSM %q to %q", p.Name, attachTo)
-		return link.AttachLSM(link.LSMOptions{
-			Program: prog,
-		})
+		return ebpfutils.AttachLSM(prog)
 	case ebpf.PerfEvent:
 		perfType := uint32(unix.PERF_TYPE_SOFTWARE)
 		perfConfig := uint64(unix.PERF_COUNT_SW_CPU_CLOCK)

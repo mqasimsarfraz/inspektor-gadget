@@ -50,6 +50,7 @@ import (
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/logs"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/otel-profiles"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/process"
+	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/shield"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/socketenricher"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/sort"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/uidgidresolver"
